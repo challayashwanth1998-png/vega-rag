@@ -50,6 +50,58 @@ Your dashboard will be available at `http://localhost:3000` and the API at `http
 
 ---
 
+## ☁️ Complete AWS Setup Guide (CLI)
+
+To deploy VegaRAG to production or use it locally with a remote AWS environment, you need to provision the core infrastructure. You can do this instantly via the AWS CLI.
+
+### 1. Create the DynamoDB Table
+VegaRAG uses a single DynamoDB table to store all multi-tenant state (Agents, Users, Data Sources, DuckDB Schemas).
+
+```bash
+aws dynamodb create-table \\
+    --table-name vegarag_table \\
+    --attribute-definitions \\
+        AttributeName=PK,AttributeType=S \\
+        AttributeName=SK,AttributeType=S \\
+    --key-schema \\
+        AttributeName=PK,KeyType=HASH \\
+        AttributeName=SK,KeyType=RANGE \\
+    --billing-mode PAY_PER_REQUEST \\
+    --region us-east-1
+```
+
+### 2. Create the S3 Document Bucket
+This bucket stores uploaded PDFs, website scrapes, and CSV/Excel files for the Text-to-SQL pipeline.
+
+```bash
+# S3 bucket names must be globally unique. Change 'vegarag-documents-123' to your own unique name.
+aws s3 mb s3://vegarag-documents-123 --region us-east-1
+
+# Block public access (Security Best Practice)
+aws s3api put-public-access-block \\
+    --bucket vegarag-documents-123 \\
+    --public-access-block-configuration "BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true"
+```
+
+*Don't forget to update your `.env` with your unique `S3_DOCUMENT_BUCKET` name!*
+
+### 3. Enable Amazon Bedrock Models
+AWS Bedrock models are disabled by default. You cannot enable them via CLI without accepting the EULA. 
+1. Open the [AWS Bedrock Console (us-east-1)](https://us-east-1.console.aws.amazon.com/bedrock/home?region=us-east-1#/modelaccess).
+2. Click **Modify model access**.
+3. Check the boxes for **Amazon Titan Text Embeddings v2** and **Amazon Nova Micro**.
+4. Click **Save changes**. Approval is usually instant.
+
+### 4. Create ECR Repositories (For Fargate Deployment)
+If you plan to deploy the Docker containers to AWS ECS Fargate, create the container registries:
+
+```bash
+aws ecr create-repository --repository-name vegarag-backend --region us-east-1
+aws ecr create-repository --repository-name vegarag-frontend --region us-east-1
+```
+
+---
+
 ## 🔒 Security & Privacy
 
 VegaRAG is designed with **Private-by-Default** principles:
