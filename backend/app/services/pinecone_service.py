@@ -1,42 +1,50 @@
+"""
+Pinecone vector store service.
+Initialized once at module load (singleton) — avoids cold-connection overhead on every request.
+
+Embedding model: Amazon Titan Embed Text v2 (via Bedrock)
+Vector store: Pinecone (index namespaced per bot_id for multi-tenant isolation)
+"""
 import os
+import uuid
 import boto3
 from pinecone import Pinecone
 from langchain_aws import BedrockEmbeddings
-import uuid
 from dotenv import load_dotenv
+
+from app.core.config import settings
 
 load_dotenv()
 
-# Initialize globally to prevent waking up API on every single web request
-pc = Pinecone(api_key=os.getenv("PINECONE_API_KEY"))
-index = pc.Index(os.getenv("PINECONE_INDEX_NAME"))
-bedrock_client = boto3.client("bedrock-runtime", region_name=os.getenv("AWS_REGION"))
-embeddings = BedrockEmbeddings(client=bedrock_client, model_id="amazon.titan-embed-text-v2:0")
+# Singleton clients — initialized once per container lifecycle
+pc = Pinecone(api_key=settings.PINECONE_API_KEY)
+index = pc.Index(settings.PINECONE_INDEX_NAME)
+bedrock_client = boto3.client("bedrock-runtime", region_name=settings.AWS_REGION)
+embeddings = BedrockEmbeddings(client=bedrock_client, model_id=settings.BEDROCK_EMBED_MODEL)
 
-def embed_and_upsert_documents(documents: list, bot_id: str):
-    """Takes chunked Langchain Documents, embeds them via Amazon, and sends to Pinecone."""
+
+def embed_and_upsert_documents(documents: list, bot_id: str) -> int:
+    """
+    Embeds a list of LangChain Documents via Bedrock Titan and upserts into
+    the agent's Pinecone namespace (namespace=bot_id for strict isolation).
+    Returns the number of vectors inserted.
+    """
     if not documents:
         return 0
-        
-    # Extract raw text array for bulk embedding
+
     texts = [doc.page_content for doc in documents]
-    
-    # Bedrock Titan V2 bulk math conversion
-    vector_data_list = embeddings.embed_documents(texts)
-    
-    # Format exactly how Pinecone expects the JSON
-    vectors_to_upsert = []
+    vector_data = embeddings.embed_documents(texts)
+
+    vectors = []
     for i, doc in enumerate(documents):
-        # We MUST manually add the text content into metadata so we can read it back out later!
         meta = doc.metadata.copy()
+        # Store original text in metadata so retrieve_node can surface it to the LLM
         meta["text"] = doc.page_content
-        
-        vectors_to_upsert.append({
+        vectors.append({
             "id": f"chunk-{uuid.uuid4()}",
-            "values": vector_data_list[i],
-            "metadata": meta
+            "values": vector_data[i],
+            "metadata": meta,
         })
-        
-    # Bulk insert into the specific bot's walled garden (Namespace)
-    index.upsert(vectors=vectors_to_upsert, namespace=bot_id)
-    return len(vectors_to_upsert)
+
+    index.upsert(vectors=vectors, namespace=bot_id)
+    return len(vectors)

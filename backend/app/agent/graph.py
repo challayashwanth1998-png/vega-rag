@@ -1,54 +1,149 @@
-import os
+"""
+Multi-Agent LangGraph — intent router + retrieval only.
+
+The graph's job is ONLY to:
+  1. Classify intent (router_node)
+  2. Retrieve the appropriate context/data based on intent
+
+Answer GENERATION is handled by chat.py's SSE streaming generator,
+which uses `final_state["intent"]` to pick the right prompt & context.
+
+Why this separation?
+- SSE streaming must happen in the HTTP response generator (chat.py)
+- LangGraph nodes are synchronous and can't yield SSE tokens
+- This keeps the graph focused on pure data retrieval
+
+Routing:
+  casual → sets intent="casual"  (chat.py does direct LLM stream)
+  rag    → Pinecone retrieval → context (chat.py streams RAG answer)
+  sql    → DuckDB Text-to-SQL  → sql_result (chat.py streams formatted table)
+"""
 import boto3
-from typing import TypedDict
+from typing import TypedDict, Literal
 from langgraph.graph import StateGraph, END
 from langchain_aws import ChatBedrockConverse
 from langchain_core.messages import SystemMessage, HumanMessage
-from app.services.pinecone_service import index, embeddings
 
-# The schema tracking variables as the agent loops through nodes
+from app.services.pinecone_service import index, embeddings
+from app.services.sql_service import execute_sql_for_bot
+from app.core.config import settings
+
+
 class AgentState(TypedDict):
     bot_id: str
     query: str
-    context: str
+    intent: str      # "casual" | "rag" | "sql"
+    context: str     # populated by rag_node
+    sql_result: str  # populated by sql_node
 
-# NODE 1: Pure Retrieval
-def retrieve_node(state: AgentState):
-    """Searches Pinecone for exact chunk matches."""
-    print("-> Triggering Memory Node...")
-    query_vector = embeddings.embed_query(state["query"])
-    
-    search_results = index.query(
-        namespace=state["bot_id"],
-        vector=query_vector,
-        top_k=5,
-        include_metadata=True
+
+def _get_llm():
+    return ChatBedrockConverse(
+        client=boto3.client("bedrock-runtime", region_name=settings.AWS_REGION),
+        model=settings.BEDROCK_CHAT_MODEL,
     )
-    
-    # Grab the text out of the metadata we injected into Pinecone
-    context_chunks = []
-    for match in search_results['matches']:
-        if 'text' in match['metadata']:
-            context_chunks.append(match['metadata']['text'])
-            
-    context_text = "\n\n---\n\n".join(context_chunks)
-    return {"context": context_text}
 
-# NODE 2: Generation Engine Setup
-def answer_node(state: AgentState):
-    """This node is merely a placeholder if we want LangGraph to mutate state. 
-    However, for high-performance SSE streaming, we generally bypass this node 
-    and call the LLM directly in the router using the context grabbed here."""
-    return {}
 
-# Build the Graph (Very simple for now, but allows complex Tool loops later!)
+# ── Node 1: Router ────────────────────────────────────────────────────────────
+
+def router_node(state: AgentState) -> AgentState:
+    """LLM-based intent classification. Returns one of: casual | rag | sql"""
+    llm = _get_llm()
+    resp = llm.invoke([
+        SystemMessage(content="""You are an intent classifier. Classify the user query into EXACTLY ONE of three categories:
+
+casual  → greetings, chit-chat, "how are you", "what can you do", very generic questions
+rag     → questions needing uploaded documents, PDFs, website content, policy docs, company knowledge
+sql     → ANY question involving: counts, totals, averages, sums, filtering data, "how many", "what is the total",
+          "show me", "list all", statistics, numbers from spreadsheets, CSV data, Excel files, records, rows
+
+IMPORTANT: When in doubt between rag and sql, pick sql if the question involves numbers or counting things.
+Examples of sql: "how many members", "what is the total revenue", "show me all records", "average age",
+                  "count of items", "how many rows", "top 5 by sales", "sum of", "which department has most"
+Examples of rag: "what does the policy say about", "explain the onboarding process", "summarize the PDF"
+Examples of casual: "hello", "what is 2+2", "tell me a joke", "who are you"
+
+Reply with ONLY: casual, rag, or sql"""),
+        HumanMessage(content=state["query"]),
+    ])
+    raw = resp.content.strip().lower() if isinstance(resp.content, str) else "rag"
+    # Extract just first word in case model added explanation
+    intent = raw.split()[0] if raw.split() else "rag"
+    intent = intent if intent in ("casual", "rag", "sql") else "rag"
+    print(f"[router] '{state['query'][:60]}' → {intent}")
+    return {"intent": intent}
+
+
+def route_decision(state: AgentState) -> Literal["casual", "rag", "sql"]:
+    return state["intent"]  # type: ignore
+
+
+# ── Node 2a: Casual — no retrieval needed ────────────────────────────────────
+
+def casual_node(state: AgentState) -> AgentState:
+    """Casual path: nothing to retrieve, chat.py streams a direct LLM answer."""
+    return {"context": "", "sql_result": ""}
+
+
+# ── Node 2b: RAG — Pinecone retrieval ────────────────────────────────────────
+
+def rag_node(state: AgentState) -> AgentState:
+    """
+    Queries Pinecone (namespace=bot_id) with Bedrock Titan embeddings.
+    Returns the top-5 chunks as context for chat.py to stream.
+    """
+    try:
+        query_vector = embeddings.embed_query(state["query"])
+        results = index.query(
+            namespace=state["bot_id"],
+            vector=query_vector,
+            top_k=5,
+            include_metadata=True,
+        )
+        chunks = [
+            m["metadata"]["text"]
+            for m in results["matches"]
+            if "text" in m.get("metadata", {})
+        ]
+        context = "\n\n---\n\n".join(chunks)
+        print(f"[rag] retrieved {len(chunks)} chunks")
+    except Exception as e:
+        print(f"[rag] Pinecone error: {e}")
+        context = ""
+    return {"context": context, "sql_result": ""}
+
+
+# ── Node 2c: SQL — DuckDB Text-to-SQL ────────────────────────────────────────
+
+def sql_node(state: AgentState) -> AgentState:
+    """
+    Runs the Text-to-SQL pipeline: lists bot tables → generates SQL → executes via DuckDB.
+    Returns formatted result string for chat.py to stream.
+    """
+    try:
+        result = execute_sql_for_bot(state["bot_id"], state["query"])
+        print(f"[sql] result preview: {result[:100]}")
+    except Exception as e:
+        result = f"SQL error: {e}"
+    return {"sql_result": result, "context": ""}
+
+
+# ── Graph Assembly ────────────────────────────────────────────────────────────
+
 graph = StateGraph(AgentState)
-graph.add_node("retrieve", retrieve_node)
-graph.add_node("answer", answer_node)
+graph.add_node("router", router_node)
+graph.add_node("casual", casual_node)
+graph.add_node("rag", rag_node)
+graph.add_node("sql", sql_node)
 
-graph.set_entry_point("retrieve")
-graph.add_edge("retrieve", "answer")
-graph.add_edge("answer", END)
+graph.set_entry_point("router")
+graph.add_conditional_edges("router", route_decision, {
+    "casual": "casual",
+    "rag": "rag",
+    "sql": "sql",
+})
+graph.add_edge("casual", END)
+graph.add_edge("rag", END)
+graph.add_edge("sql", END)
 
-# Compile into an executable engine
 agent_executor = graph.compile()

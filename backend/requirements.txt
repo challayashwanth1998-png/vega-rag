@@ -4,5 +4,15 @@ pydantic
 boto3
 langgraph
 langchain-aws
+langchain-core
+langchain-text-splitters
 pytest
 python-dotenv
+requests
+beautifulsoup4
+pinecone
+pypdf
+duckdb
+openpyxl
+pandas
+python-multipart

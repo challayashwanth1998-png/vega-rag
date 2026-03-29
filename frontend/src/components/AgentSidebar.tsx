@@ -1,7 +1,7 @@
 "use client";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Play, Activity, BarChart, Database, Zap, Users, Rocket, Settings, ArrowLeft } from "lucide-react";
+import { Play, Activity, BarChart, Database, Layers, Users, Rocket, Settings, ArrowLeft } from "lucide-react";
 
 export function AgentSidebar({ botId }: { botId: string }) {
   const pathname = usePathname() || "";
@@ -11,7 +11,7 @@ export function AgentSidebar({ botId }: { botId: string }) {
     { name: "Activity", href: `/agents/${botId}/activity`, icon: Activity },
     { name: "Analytics", href: `/agents/${botId}/analytics`, icon: BarChart },
     { name: "Data Sources", href: `/agents/${botId}/data-sources`, icon: Database },
-    { name: "Actions", href: `/agents/${botId}/actions`, icon: Zap },
+    { name: "Workflow Studio", href: `/agents/${botId}/workflow`, icon: Layers },
     { name: "Contacts", href: `/agents/${botId}/contacts`, icon: Users },
     { name: "Deploy", href: `/agents/${botId}/deploy`, icon: Rocket },
     { name: "Settings", href: `/agents/${botId}/settings`, icon: Settings },

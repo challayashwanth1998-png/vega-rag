@@ -7,7 +7,7 @@ export default async function AgentLayout({ children, params }: { children: Reac
   return (
     <div className="flex h-screen w-full bg-white relative font-sans overflow-hidden">
       <AgentSidebar botId={resolvedParams.botId} />
-      <div className="flex-1 flex flex-col h-full bg-slate-50 relative overflow-y-auto">
+      <div className="flex-1 flex flex-col h-full bg-slate-50 relative overflow-hidden">
         {children}
       </div>
     </div>

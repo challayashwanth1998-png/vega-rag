@@ -15,7 +15,7 @@ const navItems = [
 export function Sidebar() {
   const pathname = usePathname() || "";
   const auth = useAuth();
-  
+
   const creditsUsed = 18;
   const creditsTotal = 50;
   const percent = Math.round((creditsUsed / creditsTotal) * 100);
@@ -39,11 +39,10 @@ export function Sidebar() {
               <motion.div
                 whileHover={{ scale: 1.02, x: 4 }}
                 whileTap={{ scale: 0.98 }}
-                className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 ${
-                  isActive 
-                    ? "bg-blue-50 text-blue-700 shadow-sm ring-1 ring-blue-100" 
+                className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 ${isActive
+                    ? "bg-blue-50 text-blue-700 shadow-sm ring-1 ring-blue-100"
                     : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
-                }`}
+                  }`}
               >
                 <item.icon className={`w-5 h-5 ${isActive ? "text-blue-600" : "text-slate-400"}`} />
                 {item.name}
@@ -60,7 +59,7 @@ export function Sidebar() {
           <span className="text-xs font-bold text-slate-700">{creditsUsed} / {creditsTotal}</span>
         </div>
         <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden relative">
-          <motion.div 
+          <motion.div
             initial={{ width: 0 }}
             animate={{ width: `${percent}%` }}
             transition={{ duration: 1, ease: "easeOut" }}
