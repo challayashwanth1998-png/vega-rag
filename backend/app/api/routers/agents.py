@@ -11,6 +11,10 @@ class CreateAgentReq(BaseModel):
     name: str
     user_email: str
 
+class WorkflowReq(BaseModel):
+    nodes: list
+    edges: list
+
 @router.post("")
 def create_agent(req: CreateAgentReq):
     """Creates a new agent tied specifically to the user's email in DynamoDB"""
@@ -145,4 +149,36 @@ def get_agent_config(bot_id: str):
         "system_prompt": "You are a brilliant, concise AI assistant. Answer accurately based strictly on the context provided.",
         "brand_color": "#2563eb",
         "name": "Custom Agent"
+    }
+
+@router.put("/{bot_id}/workflow")
+def update_agent_workflow(bot_id: str, req: WorkflowReq):
+    """Saves the visual workflow state for the agent in DynamoDB"""
+    dynamodb = boto3.resource('dynamodb', region_name=os.getenv('AWS_REGION'))
+    table = dynamodb.Table(os.getenv('DYNAMODB_TABLE_NAME'))
+    table.put_item(Item={
+        "PK": f"AGENT#{bot_id}",
+        "SK": "WORKFLOW",
+        "nodes": req.nodes,
+        "edges": req.edges,
+        "updatedAt": datetime.utcnow().isoformat()
+    })
+    return {"status": "workflow saved"}
+
+@router.get("/{bot_id}/workflow")
+def get_agent_workflow(bot_id: str):
+    """Retrieves the visual workflow state for the agent"""
+    dynamodb = boto3.resource('dynamodb', region_name=os.getenv('AWS_REGION'))
+    table = dynamodb.Table(os.getenv('DYNAMODB_TABLE_NAME'))
+    resp = table.get_item(Key={"PK": f"AGENT#{bot_id}", "SK": "WORKFLOW"})
+    if "Item" in resp:
+        return resp["Item"]
+    return {
+        "nodes": [
+            { "id": '1', "type": 'start', "position": { "x": 250, "y": 50 }, "data": { "message": 'Hello! How can I help you?' } },
+            { "id": '2', "type": 'chat', "position": { "x": 250, "y": 350 }, "data": { "label": 'AI Engine' } }
+        ],
+        "edges": [
+            { "id": 'e1-2', "source": '1', "target": '2', "animated": True, "style": { "stroke": '#94a3b8', "strokeWidth": 2 } }
+        ]
     }

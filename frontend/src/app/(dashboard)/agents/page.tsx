@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Plus, Bot, Clock, ArrowRight, Loader2, X } from "lucide-react";
+import { Plus, Bot, Clock, ArrowRight, Loader2, X, Layers } from "lucide-react";
 import Link from "next/link";
 import useSWR from "swr";
 import { useAuth } from "react-oidc-context";
@@ -78,41 +78,43 @@ export default function AgentsGrid() {
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-          {agents?.map((agent: any, i: number) => (
-            <Link key={agent.bot_id} href={`/agents/${agent.bot_id}/playground`}>
-              <motion.div 
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: i * 0.1, ease: "easeOut" }}
-                whileHover={{ y: -5, boxShadow: "0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1)" }}
-                className="bg-white rounded-2xl border border-slate-200 overflow-hidden cursor-pointer group flex flex-col h-[280px]"
+          {agents?.map((agent: any) => (
+            <div 
+                key={agent.bot_id}
+                className="bg-white rounded-[2.5rem] border border-slate-200 overflow-hidden group flex flex-col h-auto shadow-sm hover:shadow-2xl transition-all duration-500"
               >
                 {/* Agent Card Header Graphic */}
-                <div className="h-28 bg-gradient-to-br from-blue-500 to-cyan-600 relative overflow-hidden flex items-center justify-center">
-                  <div className="absolute inset-0 bg-white/20 backdrop-blur-[2px] opacity-0 group-hover:opacity-100 transition duration-300" />
-                  <Bot className="w-10 h-10 text-white drop-shadow-md z-10 transition-transform group-hover:scale-110 duration-300" />
+                <div className="h-28 bg-slate-900 relative overflow-hidden flex items-center justify-center">
+                  <div className="absolute inset-0 bg-blue-600/10 opacity-0 group-hover:opacity-100 transition duration-500" />
+                  <Bot className="w-10 h-10 text-white drop-shadow-md z-10 transition-transform group-hover:scale-110 duration-500" />
                 </div>
                 
-                <div className="p-6 flex flex-col flex-grow">
-                  <div className="flex justify-between items-start mb-4">
-                    <h3 className="text-xl font-bold text-slate-800 group-hover:text-blue-600 transition truncate pr-4">{agent.name}</h3>
-                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold border bg-emerald-50 text-emerald-700 border-emerald-200 uppercase tracking-wider">
+                <div className="p-8 flex flex-col flex-grow">
+                  <div className="flex justify-between items-start mb-6">
+                    <h3 className="text-xl font-black text-slate-900 group-hover:text-blue-600 transition truncate pr-4 italic uppercase tracking-tighter">{agent.name}</h3>
+                    <span className="inline-flex items-center px-3 py-1 rounded-full text-[10px] font-black border bg-emerald-50 text-emerald-700 border-emerald-100 uppercase tracking-widest">
                       <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full mr-1.5 animate-pulse" />
-                      Active
+                      Live
                     </span>
                   </div>
                   
-                  <div className="mt-auto pt-4 border-t border-slate-100 flex items-center justify-between text-sm text-slate-500">
-                    <span className="flex items-center gap-1.5 font-medium">
+                  <div className="space-y-3 mb-8">
+                     <Link href={`/agents/${agent.bot_id}/workflow`} className="w-full py-4 px-6 bg-blue-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-blue-700 transition shadow-lg shadow-blue-600/20">
+                        <Layers className="w-4 h-4" /> Workflow Studio
+                     </Link>
+                     <Link href={`/agents/${agent.bot_id}/playground`} className="w-full py-4 px-6 bg-slate-50 text-slate-900 border border-slate-100 rounded-2xl font-black text-xs uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-slate-100 transition">
+                        <ArrowRight className="w-4 h-4" /> Open Playground
+                     </Link>
+                  </div>
+
+                  <div className="mt-auto pt-6 border-t border-slate-50 flex items-center justify-between text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                    <span className="flex items-center gap-1.5 font-black">
                       <Clock className="w-4 h-4" /> {new Date(agent.createdAt).toLocaleDateString()}
                     </span>
-                    <span className="text-blue-600 font-bold flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity transform translate-x-[-10px] group-hover:translate-x-0 duration-300">
-                      Open API <ArrowRight className="w-4 h-4" />
-                    </span>
+                    <span className="text-slate-300 italic">V1.0.4 - Bedrock Nova</span>
                   </div>
                 </div>
-              </motion.div>
-            </Link>
+              </div>
           ))}
         </div>
       )}
