@@ -92,13 +92,140 @@ AWS Bedrock models are disabled by default. You cannot enable them via CLI witho
 3. Check the boxes for **Amazon Titan Text Embeddings v2** and **Amazon Nova Micro**.
 4. Click **Save changes**. Approval is usually instant.
 
-### 4. Create ECR Repositories (For Fargate Deployment)
-If you plan to deploy the Docker containers to AWS ECS Fargate, create the container registries:
+### 4. Create ECR Repositories and Push Images
+To deploy the Docker containers to AWS ECS Fargate, create the container registries:
 
 ```bash
+# 1. Create Repositories
 aws ecr create-repository --repository-name vegarag-backend --region us-east-1
 aws ecr create-repository --repository-name vegarag-frontend --region us-east-1
+
+# 2. Authenticate Docker to your ECR Registry
+aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin <AWS_ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com
+
+# 3. Build and Push Backend
+cd backend
+docker build --platform linux/amd64 -t vegarag-backend .
+docker tag vegarag-backend:latest <AWS_ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/vegarag-backend:latest
+docker push <AWS_ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/vegarag-backend:latest
+
+# 4. Build and Push Frontend (Requires the future Backend URL for Next.js build step)
+cd ../frontend
+docker build --platform linux/amd64 --build-arg NEXT_PUBLIC_API_URL=https://your-alb-domain.com -t vegarag-frontend .
+docker tag vegarag-frontend:latest <AWS_ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/vegarag-frontend:latest
+docker push <AWS_ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/vegarag-frontend:latest
 ```
+
+---
+
+## 🚢 AWS ECS Fargate Deployment Guide
+
+Deploying a multi-container application on AWS involves provisioning a Cluster, an Application Load Balancer (ALB), and Task Definitions. By using **Fargate**, you don't need to manage EC2 instances.
+
+### Step 1: Create an ECS Cluster
+```bash
+aws ecs create-cluster --cluster-name vegarag-cluster --region us-east-1
+```
+
+### Step 2: Create execution and task roles (Zero-Key Security)
+DO NOT put your `AWS_ACCESS_KEY_ID` in the container environment variables. Create an IAM Role instead natively assigned to the Fargate instances.
+
+```bash
+# Create the standard execution role (allows Fargate to pull from ECR and write logs)
+aws iam create-role --role-name ecsTaskExecutionRole --assume-role-policy-document file://ecs-trust-policy.json
+aws iam attach-role-policy --role-name ecsTaskExecutionRole --policy-arn arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
+
+# Create the Task Role (this gives the running python app access to Bedrock, S3, and DynamoDB)
+aws iam create-role --role-name vegaragTaskRole --assume-role-policy-document file://ecs-trust-policy.json
+aws iam attach-role-policy --role-name vegaragTaskRole --policy-arn arn:aws:iam::aws:policy/AmazonBedrockFullAccess
+aws iam attach-role-policy --role-name vegaragTaskRole --policy-arn arn:aws:iam::aws:policy/AmazonS3FullAccess
+aws iam attach-role-policy --role-name vegaragTaskRole --policy-arn arn:aws:iam::aws:policy/AmazonDynamoDBFullAccess
+```
+
+### Step 3: Register Task Definitions
+You must define `backend-task.json` and `frontend-task.json` telling ECS how to run your pushed images.
+
+**Example `backend-task.json`**:
+```json
+{
+  "family": "vegarag-backend-task",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "1024",
+  "memory": "2048",
+  "executionRoleArn": "arn:aws:iam::<ACCOUNT_ID>:role/ecsTaskExecutionRole",
+  "taskRoleArn": "arn:aws:iam::<ACCOUNT_ID>:role/vegaragTaskRole",
+  "containerDefinitions": [
+    {
+      "name": "vegarag-backend",
+      "image": "<ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/vegarag-backend:latest",
+      "portMappings": [{"containerPort": 8000, "protocol": "tcp"}],
+      "environment": [
+        {"name": "PINECONE_API_KEY", "value": "your-key-here"}
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/vegarag",
+          "awslogs-region": "us-east-1",
+          "awslogs-stream-prefix": "backend"
+        }
+      }
+    }
+  ]
+}
+```
+**Register it:**
+```bash
+aws ecs register-task-definition --cli-input-json file://backend-task.json
+```
+
+### Step 4: Create an Application Load Balancer (ALB) and Target Groups
+Because we have two services (Next.js on 3000, FastAPI on 8000), we want to route them through a single domain name (e.g. `your-domain.com`).
+
+```bash
+# 1. Create Target Groups
+aws elbv2 create-target-group --name vegarag-tg-frontend --protocol HTTP --port 3000 --vpc-id <YOUR_VPC_ID> --target-type ip
+aws elbv2 create-target-group --name vegarag-tg-backend --protocol HTTP --port 8000 --vpc-id <YOUR_VPC_ID> --target-type ip
+
+# 2. Create the Load Balancer
+aws elbv2 create-load-balancer --name vegarag-alb --subnets <SUBNET_1> <SUBNET_2> --security-groups <SG_ID>
+
+# 3. Create a Listener on Port 80 (or 443 for HTTPS) resolving to Frontend initially
+aws elbv2 create-listener --load-balancer-arn <ALB_ARN> --protocol HTTP --port 80 --default-actions Type=forward,TargetGroupArn=<FRONTEND_TG_ARN>
+
+# 4. Create an ALB Rule for Backend Routing
+aws elbv2 create-rule --listener-arn <LISTENER_ARN> --priority 10 \\
+  --conditions Field=path-pattern,Values='/api/*' \\
+  --actions Type=forward,TargetGroupArn=<BACKEND_TG_ARN>
+```
+
+### Step 5: Launch the ECS Services
+Finally, launch the containers into the cluster! AWS will boot them, attach them to the ALB target groups, and keep them alive.
+
+```bash
+# Launch Backend Service
+aws ecs create-service \\
+    --cluster vegarag-cluster \\
+    --service-name vegarag-backend-svc \\
+    --task-definition vegarag-backend-task \\
+    --desired-count 1 \\
+    --launch-type FARGATE \\
+    --network-configuration "awsvpcConfiguration={subnets=[<SUBNET_1>,<SUBNET_2>],securityGroups=[<SG_ID>],assignPublicIp=ENABLED}" \\
+    --load-balancers "targetGroupArn=<BACKEND_TG_ARN>,containerName=vegarag-backend,containerPort=8000"
+
+# Launch Frontend Service
+aws ecs create-service \\
+    --cluster vegarag-cluster \\
+    --service-name vegarag-frontend-svc \\
+    --task-definition vegarag-frontend-task \\
+    --desired-count 1 \\
+    --launch-type FARGATE \\
+    --network-configuration "awsvpcConfiguration={subnets=[<SUBNET_1>,<SUBNET_2>],securityGroups=[<SG_ID>],assignPublicIp=ENABLED}" \\
+    --load-balancers "targetGroupArn=<FRONTEND_TG_ARN>,containerName=vegarag-frontend,containerPort=3000"
+```
+
+Everything is now deployed! Traffic hitting your ALB will cleanly route `/api/*` to the FastAPI backend and all other traffic to your Next.js frontend!
 
 ---
 
