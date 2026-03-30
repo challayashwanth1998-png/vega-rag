@@ -463,12 +463,9 @@ export default function AgentWorkflowPage() {
                         <Layers className="w-8 h-8" />
                     </div>
                     <h2 className="text-3xl font-black text-white mb-4 uppercase tracking-tighter">Workflow Studio<br/><span className="text-blue-500">Coming Soon</span></h2>
-                    <p className="text-slate-400 font-medium text-lg leading-relaxed mb-8">
+                    <p className="text-slate-400 font-medium text-lg leading-relaxed mb-4">
                         The visual drag-and-drop Workflow engine is currently under construction. Stay tuned to build advanced node-based chat logic!
                     </p>
-                    <Link href={`/agents`} className="inline-block px-8 py-4 bg-blue-600 text-white font-black rounded-xl hover:bg-blue-500 transition shadow-lg hover:-translate-y-1">
-                        Go Back
-                    </Link>
                 </div>
             </div>
             

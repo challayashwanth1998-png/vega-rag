@@ -20,6 +20,11 @@ export function Sidebar() {
   const creditsTotal = 50;
   const percent = Math.round((creditsUsed / creditsTotal) * 100);
 
+  // Hide the global sidebar when inside a specific agent's detailed view
+  if (pathname.startsWith('/agents/') && pathname !== '/agents') {
+    return null;
+  }
+
   return (
     <div className="h-screen w-64 bg-slate-50 border-r border-slate-200 flex flex-col text-slate-800 shadow-sm z-10 shrink-0">
       {/* Brand & Logo */}
