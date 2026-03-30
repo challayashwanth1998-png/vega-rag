@@ -4,13 +4,11 @@ import { useState, useRef, useEffect } from "react";
 import { Send, Bot, User, RefreshCcw, Zap } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import useSWR from "swr";
-import { api } from "@/lib/api";
 
 const fetcher = (url: string) => fetch(url).then(r => r.json());
 
 export function ChatBox({ botId, hasSources = false }: { botId: string, hasSources?: boolean }) {
-  const { data: config } = useSWR(`${api.baseUrl}/api/agents/${botId}/config`, fetcher);
-  const { data: sources } = useSWR(`${api.baseUrl}/api/agents/${botId}/sources`, fetcher);
+  const { data: config } = useSWR(`http://localhost:8000/api/agents/${botId}/config`, fetcher);
   const brandColor = config?.brand_color || "#2563eb";
   const agentName = config?.name || "AI Sandbox";
 
@@ -58,7 +56,7 @@ export function ChatBox({ botId, hasSources = false }: { botId: string, hasSourc
     try {
       setMessages(prev => [...prev, { role: "agent", content: "" }]); 
       
-      const response = await fetch(`${api.baseUrl}/api/chat`, {
+      const response = await fetch("http://localhost:8000/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json", "Accept": "text/event-stream" },
         body: JSON.stringify({ query: userMsg, bot_id: botId, session_id: sessionId })

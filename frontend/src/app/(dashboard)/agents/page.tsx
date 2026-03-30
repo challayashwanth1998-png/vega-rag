@@ -50,17 +50,17 @@ export default function AgentsGrid() {
   };
 
   return (
-    <div className="p-6 md:p-10 max-w-7xl mx-auto w-full min-h-screen bg-slate-50 relative">
-      <header className="mb-10 flex flex-col md:flex-row gap-4 md:items-center justify-between">
+    <div className="p-10 max-w-7xl mx-auto w-full min-h-screen bg-slate-50 relative">
+      <header className="mb-10 flex justify-between items-center bg-transparent">
         <div>
-          <h1 className="text-3xl md:text-4xl font-extrabold text-slate-900 tracking-tight leading-tight">Your Agents</h1>
-          <p className="text-slate-500 mt-1 md:mt-2 text-base md:text-lg">Manage and deploy your RAG assistants.</p>
+          <h1 className="text-4xl font-extrabold text-slate-900 tracking-tight">Your Agents</h1>
+          <p className="text-slate-500 mt-2 text-lg">Manage and deploy your RAG assistants.</p>
         </div>
         <motion.button
           whileHover={{ scale: 1.05 }}
           whileTap={{ scale: 0.95 }}
           onClick={() => setIsModalOpen(true)}
-          className="bg-slate-900 text-white px-5 py-3 rounded-xl font-medium shadow-lg shadow-slate-900/20 flex items-center justify-center gap-2 hover:bg-slate-800 transition"
+          className="bg-slate-900 text-white px-5 py-2.5 rounded-xl font-medium shadow-lg shadow-slate-900/20 flex items-center gap-2 hover:bg-slate-800 transition"
         >
           <Plus className="w-5 h-5" /> Create Agent
         </motion.button>

@@ -14,14 +14,19 @@ const navItems = [
 
 export function Sidebar() {
   const pathname = usePathname() || "";
-  const auth = useAuth();
+  let auth: any = null;
+  try {
+    auth = useAuth();
+  } catch (e) {
+    // Auth context not provided
+  }
 
   const creditsUsed = 18;
   const creditsTotal = 50;
   const percent = Math.round((creditsUsed / creditsTotal) * 100);
 
   return (
-    <div className="h-full w-full bg-slate-50 flex flex-col text-slate-800 shadow-sm z-10 shrink-0">
+    <div className="h-screen w-64 bg-slate-50 border-r border-slate-200 flex flex-col text-slate-800 shadow-sm z-10 shrink-0">
       {/* Brand & Logo */}
       <div className="p-6 flex items-center gap-3">
         <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-cyan-600 flex items-center justify-center shadow-lg shadow-blue-500/30">
@@ -73,13 +78,15 @@ export function Sidebar() {
       <div className="p-4 border-t border-slate-200 flex items-center justify-between">
         <div className="flex items-center gap-3 truncate">
           <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-bold text-sm shrink-0">
-            {auth.user?.profile?.email?.charAt(0).toUpperCase() || "U"}
+            {auth?.user?.profile?.email?.charAt(0).toUpperCase() || "A"}
           </div>
-          <span className="text-sm font-medium truncate">{auth.user?.profile?.email || "Authenticated"}</span>
+          <span className="text-sm font-medium truncate">{auth?.user?.profile?.email || "Admin User"}</span>
         </div>
-        <button onClick={() => auth.removeUser()} className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-md transition">
-          <LogOut className="w-4 h-4" />
-        </button>
+        {auth?.removeUser && (
+           <button onClick={() => auth.removeUser()} className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-md transition">
+             <LogOut className="w-4 h-4" />
+           </button>
+        )}
       </div>
     </div>
   );

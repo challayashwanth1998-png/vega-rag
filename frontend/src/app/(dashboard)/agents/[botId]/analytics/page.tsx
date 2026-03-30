@@ -5,15 +5,13 @@ import useSWR from "swr";
 import { BarChart as BarGraphic, Activity, Bot } from "lucide-react";
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 
-import { api } from "@/lib/api";
-
 const fetcher = (url: string) => fetch(url).then(r => r.json());
 
 export default function AnalyticsPage({ params }: { params: any }) {
   const resolvedParams: any = use(params);
   const botId = resolvedParams.botId;
 
-  const { data: analytics } = useSWR(`${api.baseUrl}/api/agents/${botId}/analytics`, fetcher, { refreshInterval: 5000 });
+  const { data: analytics } = useSWR(`http://localhost:8000/api/agents/${botId}/analytics`, fetcher, { refreshInterval: 5000 });
 
   const totalQueries = analytics?.reduce((sum: number, item: any) => sum + item.queries, 0) || 0;
 

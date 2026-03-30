@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useCallback, useMemo, useState, useEffect, useRef } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import ReactFlow, { 
   Background, 
   Controls, 
@@ -49,6 +50,7 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
+import { api } from '@/lib/api';
 
 function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -201,7 +203,7 @@ function WorkflowCanvas() {
 
     // Load Workflow
     useEffect(() => {
-        fetch(`http://localhost:8000/api/agents/${botId}/workflow`)
+        fetch(`${api.baseUrl}/api/agents/${botId}/workflow`)
             .then(res => res.json())
             .then(data => {
                 setNodes(data.nodes || []);
@@ -217,7 +219,7 @@ function WorkflowCanvas() {
     const onSave = async () => {
         setIsSaving(true);
         try {
-            await fetch(`http://localhost:8000/api/agents/${botId}/workflow`, {
+            await fetch(`${api.baseUrl}/api/agents/${botId}/workflow`, {
                 method: "PUT",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
@@ -286,13 +288,13 @@ function WorkflowCanvas() {
     };
 
     if (isLoading) return (
-        <div className="flex h-screen w-full items-center justify-center bg-white">
+        <div className="flex h-full w-full items-center justify-center bg-white">
             <Loader2 className="w-10 h-10 text-blue-600 animate-spin" />
         </div>
     );
 
     return (
-        <div className="flex h-screen bg-slate-50 font-sans overflow-hidden">
+        <div className="flex h-full bg-slate-50 font-sans overflow-hidden">
             {/* Canvas Sidebar */}
             <aside className={cn(
                 "bg-white border-r-2 border-slate-100 flex flex-col transition-all duration-500 z-50",
