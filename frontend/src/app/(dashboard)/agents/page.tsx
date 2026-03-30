@@ -24,6 +24,19 @@ export default function AgentsGrid() {
     fetcher
   );
 
+  const handleDeleteAgent = async (botId: string, event: React.MouseEvent) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (!confirm("Are you sure you want to delete this agent? This cannot be undone.")) return;
+    try {
+      await fetch(`${api.baseUrl}/api/agents/${botId}?user_email=${encodeURIComponent(userEmail)}`, { method: "DELETE" });
+      mutate();
+    } catch (err) {
+      console.error("Failed to delete agent:", err);
+    }
+  };
+
+
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [newAgentName, setNewAgentName] = useState("");
   const [isCreating, setIsCreating] = useState(false);
@@ -50,10 +63,12 @@ export default function AgentsGrid() {
   };
 
   return (
-    <div className="p-10 max-w-7xl mx-auto w-full min-h-screen bg-slate-50 relative">
+    <div className="p-10 max-w-7xl mx-auto w-full min-h-screen bg-transparent relative">
       <header className="mb-10 flex justify-between items-center bg-transparent">
         <div>
-          <h1 className="text-4xl font-extrabold text-slate-900 tracking-tight">Your Agents</h1>
+          <h1 className="text-4xl font-black text-slate-900 tracking-tighter uppercase italic">
+            <span className="underline decoration-blue-500 decoration-4 underline-offset-8">Your Agents</span>
+          </h1>
           <p className="text-slate-500 mt-2 text-lg">Manage and deploy your RAG assistants.</p>
         </div>
         <motion.button
@@ -78,38 +93,32 @@ export default function AgentsGrid() {
           <p className="text-slate-500 mt-2 text-center max-w-md">Click "Create Agent" to setup your first intelligent bot connected to Pinecone.</p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
           {agents?.map((agent: any) => (
             <div
               key={agent.bot_id}
-              className="bg-white rounded-[2.5rem] border border-slate-200 overflow-hidden group flex flex-col h-auto shadow-sm hover:shadow-2xl transition-all duration-500"
+              className="bg-white rounded-[1.5rem] border border-slate-200 overflow-hidden group flex flex-col h-auto shadow-sm hover:shadow-xl transition-all duration-500"
             >
-              {/* Agent Card Header Graphic */}
-              <div className="h-28 bg-slate-900 relative overflow-hidden flex items-center justify-center">
+              <div className="h-20 bg-slate-900 relative overflow-hidden flex items-center justify-center">
                 <div className="absolute inset-0 bg-blue-600/10 opacity-0 group-hover:opacity-100 transition duration-500" />
-                <Bot className="w-10 h-10 text-white drop-shadow-md z-10 transition-transform group-hover:scale-110 duration-500" />
+                <Bot className="w-6 h-6 text-white drop-shadow-md z-10 transition-transform group-hover:scale-110 duration-500" />
               </div>
 
-              <div className="p-8 flex flex-col flex-grow">
-                <div className="flex justify-between items-start mb-6">
-                  <h3 className="text-xl font-black text-slate-900 group-hover:text-blue-600 transition truncate pr-4 italic uppercase tracking-tighter">{agent.name}</h3>
-                  <span className="inline-flex items-center px-3 py-1 rounded-full text-[10px] font-black border bg-emerald-50 text-emerald-700 border-emerald-100 uppercase tracking-widest">
-                    <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full mr-1.5 animate-pulse" />
-                    Live
-                  </span>
+              <div className="p-4 flex flex-col flex-grow">
+                <div className="flex justify-between items-start mb-3">
+                  <h3 className="text-xs font-black text-slate-900 group-hover:text-blue-600 transition truncate pr-2 italic uppercase tracking-tighter leading-tight">{agent.name}</h3>
                 </div>
 
-                <div className="mb-8">
-                  <Link href={`/agents/${agent.bot_id}/playground`} className="w-full py-4 px-6 bg-slate-900 text-white rounded-2xl font-black text-xs uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-blue-600 transition shadow-lg">
-                    <ArrowRight className="w-4 h-4" /> Open Playground
+                <div className="mb-4">
+                  <Link href={`/agents/${agent.bot_id}/playground`} className="w-full py-2 px-3 bg-slate-900 text-white rounded-xl font-black text-[9px] uppercase tracking-widest flex items-center justify-center gap-1.5 hover:bg-blue-600 transition shadow-md">
+                    <ArrowRight className="w-3 h-3" /> Playground
                   </Link>
                 </div>
 
-                <div className="mt-auto pt-6 border-t border-slate-50 flex items-center justify-between text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                  <span className="flex items-center gap-1.5 font-black">
-                    <Clock className="w-4 h-4" /> {new Date(agent.createdAt).toLocaleDateString()}
+                <div className="mt-auto pt-3 border-t border-slate-50 flex items-center justify-between text-[8px] font-black text-slate-400 uppercase tracking-widest">
+                  <span className="flex items-center gap-1 font-black">
+                    <Clock className="w-3 h-3" /> {new Date(agent.createdAt).toLocaleDateString()}
                   </span>
-                  <span className="text-slate-300 italic">V1.0.4 - Bedrock Nova</span>
                 </div>
               </div>
             </div>

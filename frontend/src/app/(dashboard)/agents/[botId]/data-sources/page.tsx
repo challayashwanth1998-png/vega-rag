@@ -100,7 +100,7 @@ export default function DataSourcesPage({ params }: { params: any }) {
   const DropZone = ({ file, setFile, accept, acceptLabel, inputRef }: {
     file: File | null; setFile: (f: File) => void;
     accept: string[]; acceptLabel: string;
-    inputRef: React.RefObject<HTMLInputElement>;
+    inputRef: React.RefObject<HTMLInputElement | null>;
   }) => (
     <div
       onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}

@@ -14,12 +14,7 @@ const navItems = [
 
 export function Sidebar() {
   const pathname = usePathname() || "";
-  let auth: any = null;
-  try {
-    auth = useAuth();
-  } catch (e) {
-    // Auth context not provided
-  }
+  const auth = useAuth();
 
   const creditsUsed = 18;
   const creditsTotal = 50;
@@ -78,15 +73,20 @@ export function Sidebar() {
       <div className="p-4 border-t border-slate-200 flex items-center justify-between">
         <div className="flex items-center gap-3 truncate">
           <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-bold text-sm shrink-0">
-            {auth?.user?.profile?.email?.charAt(0).toUpperCase() || "A"}
+            {auth.user?.profile?.email?.charAt(0).toUpperCase() || "U"}
           </div>
-          <span className="text-sm font-medium truncate">{auth?.user?.profile?.email || "Admin User"}</span>
+          <span className="text-sm font-medium truncate">{auth.user?.profile?.email || "Authenticated"}</span>
         </div>
-        {auth?.removeUser && (
-           <button onClick={() => auth.removeUser()} className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-md transition">
-             <LogOut className="w-4 h-4" />
-           </button>
-        )}
+        <button 
+          onClick={() => {
+            const logoutUrl = `https://us-east-1b7zudvphb.auth.us-east-1.amazoncognito.com/logout?client_id=40ps5mipuj6g2vhhec9skkiog2&logout_uri=${encodeURIComponent(window.location.origin)}`;
+            auth.removeUser(); // Clear local state first
+            window.location.href = logoutUrl;
+          }} 
+          className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-md transition"
+        >
+          <LogOut className="w-4 h-4" />
+        </button>
       </div>
     </div>
   );

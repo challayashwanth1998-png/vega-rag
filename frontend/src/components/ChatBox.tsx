@@ -5,10 +5,14 @@ import { Send, Bot, User, RefreshCcw, Zap } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import useSWR from "swr";
 
+import { api } from "@/lib/api";
+
 const fetcher = (url: string) => fetch(url).then(r => r.json());
 
 export function ChatBox({ botId, hasSources = false }: { botId: string, hasSources?: boolean }) {
-  const { data: config } = useSWR(`http://localhost:8000/api/agents/${botId}/config`, fetcher);
+  const { data: config } = useSWR(`${api.baseUrl}/api/agents/${botId}/config`, fetcher);
+  const { data: sources } = useSWR(`${api.baseUrl}/api/agents/${botId}/sources`, fetcher);
+  
   const brandColor = config?.brand_color || "#2563eb";
   const agentName = config?.name || "AI Sandbox";
 
@@ -16,6 +20,7 @@ export function ChatBox({ botId, hasSources = false }: { botId: string, hasSourc
     { role: "agent", content: "Loading memory state..." }
   ]);
   const [input, setInput] = useState("");
+  const [selectedSource, setSelectedSource] = useState("");
   const [isTyping, setIsTyping] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   
@@ -56,10 +61,15 @@ export function ChatBox({ botId, hasSources = false }: { botId: string, hasSourc
     try {
       setMessages(prev => [...prev, { role: "agent", content: "" }]); 
       
-      const response = await fetch("http://localhost:8000/api/chat", {
+      const response = await fetch(`${api.baseUrl}/api/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json", "Accept": "text/event-stream" },
-        body: JSON.stringify({ query: userMsg, bot_id: botId, session_id: sessionId })
+        body: JSON.stringify({ 
+           query: userMsg, 
+           bot_id: botId, 
+           session_id: sessionId,
+           filter_source: selectedSource || null
+        })
       });
 
       if (!response.body) throw new Error("No response body");
@@ -154,7 +164,23 @@ export function ChatBox({ botId, hasSources = false }: { botId: string, hasSourc
       </div>
 
       {/* Input Box */}
-      <div className="p-5 bg-white border-t border-slate-100 flex flex-col shrink-0">
+      <div className="p-5 flex flex-col shrink-0 bg-white border-t border-slate-50 relative z-20 shadow-[0_-10px_40px_-15px_rgba(0,0,0,0.05)]">
+        {sources && sources.length > 0 && (
+          <div className="mb-3 flex items-center gap-2">
+            <span className="text-[10px] uppercase tracking-widest font-black text-slate-400">Target Source:</span>
+            <select 
+              value={selectedSource}
+              onChange={(e) => setSelectedSource(e.target.value)}
+              className="text-xs font-bold bg-slate-100/50 text-slate-600 rounded-lg px-3 py-1.5 outline-none border border-slate-200 cursor-pointer hover:bg-slate-100 transition max-w-[200px] truncate"
+            >
+              <option value="">All Memory (Global)</option>
+              {sources.map((s: any) => (
+                <option key={s.SK} value={s.url}>{s.url.replace('Raw Text: ', '').replace('PDF: ', '')}</option>
+              ))}
+            </select>
+          </div>
+        )}
+        
         <div className="mb-4 relative flex items-center shadow-sm rounded-2xl overflow-hidden bg-slate-50 border border-slate-200 focus-within:border-blue-500 focus-within:bg-white focus-within:ring-4 focus-within:ring-blue-500/10 transition-all">
           <input 
             type="text" 
