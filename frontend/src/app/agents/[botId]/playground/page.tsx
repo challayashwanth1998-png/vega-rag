@@ -5,6 +5,8 @@ import { Settings2, SlidersHorizontal, ShieldCheck, HeartHandshake, Briefcase, C
 import { use, useEffect, useState } from "react";
 import useSWR from "swr";
 
+import { api } from "@/lib/api";
+
 const fetcher = (url: string) => fetch(url).then(r => r.json());
 
 const PRESETS = [
@@ -18,8 +20,8 @@ export default function PlaygroundPage({ params }: { params: any }) {
   const botId = resolvedParams.botId;
 
   // Real-time polling to unlock ChatBox
-  const { data: sources } = useSWR(`http://localhost:8000/api/agents/${botId}/sources`, fetcher, { refreshInterval: 5000 });
-  const { data: config, mutate: mutateConfig } = useSWR(`http://localhost:8000/api/agents/${botId}/config`, fetcher);
+  const { data: sources } = useSWR(`${api.baseUrl}/api/agents/${botId}/sources`, fetcher, { refreshInterval: 5000 });
+  const { data: config, mutate: mutateConfig } = useSWR(`${api.baseUrl}/api/agents/${botId}/config`, fetcher);
 
   const [promptInput, setPromptInput] = useState("");
   const [isSaving, setIsSaving] = useState(false);
@@ -33,7 +35,7 @@ export default function PlaygroundPage({ params }: { params: any }) {
     if (!promptInput.trim()) return;
     setIsSaving(true);
     try {
-      await fetch(`http://localhost:8000/api/agents/${botId}/config`, {
+      await fetch(`${api.baseUrl}/api/agents/${botId}/config`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ 

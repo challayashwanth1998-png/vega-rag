@@ -5,13 +5,15 @@ import useSWR from "swr";
 import { MessageSquare, Bot, User, Clock, ChevronRight, Loader2, ArrowLeft } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
+import { api } from "@/lib/api";
+
 const fetcher = (url: string) => fetch(url).then(r => r.json());
 
 export default function ActivityPage({ params }: { params: any }) {
   const resolvedParams: any = use(params);
   const botId = resolvedParams.botId;
 
-  const { data: logs, isLoading } = useSWR(`http://localhost:8000/api/agents/${botId}/activity`, fetcher, { refreshInterval: 10000 });
+  const { data: logs, isLoading } = useSWR(`${api.baseUrl}/api/agents/${botId}/activity`, fetcher, { refreshInterval: 10000 });
 
   const [activeSession, setActiveSession] = useState<string | null>(null);
 

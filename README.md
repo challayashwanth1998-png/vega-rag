@@ -240,11 +240,13 @@ VegaRAG is designed with **Private-by-Default** principles:
 
 ## 📜 License
 
-Distributed under the MIT License.
+Distributed under the [MIT License](LICENSE).
 
 ---
 
 ## 🤝 Contributing
+
+We welcome contributions! See our [Contributing Guide](CONTRIBUTING.md) for more details.
 
 1. Fork the Project
 2. Create your Feature Branch
