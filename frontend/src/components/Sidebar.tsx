@@ -21,7 +21,7 @@ export function Sidebar() {
   const percent = Math.round((creditsUsed / creditsTotal) * 100);
 
   return (
-    <div className="h-screen w-64 bg-slate-50 border-r border-slate-200 flex flex-col text-slate-800 shadow-sm z-10 shrink-0">
+    <div className="h-full w-full bg-slate-50 flex flex-col text-slate-800 shadow-sm z-10 shrink-0">
       {/* Brand & Logo */}
       <div className="p-6 flex items-center gap-3">
         <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-cyan-600 flex items-center justify-center shadow-lg shadow-blue-500/30">
