@@ -455,8 +455,29 @@ function WorkflowCanvas() {
 
 export default function AgentWorkflowPage() {
     return (
-        <ReactFlowProvider>
-            <WorkflowCanvas />
-        </ReactFlowProvider>
+        <div className="relative w-full h-full overflow-hidden">
+            {/* Coming Soon Overlay */}
+            <div className="absolute inset-0 z-50 flex items-center justify-center bg-white/40 backdrop-blur-md">
+                <div className="bg-slate-900 border border-slate-800 p-10 rounded-[2rem] shadow-2xl max-w-lg text-center mx-4">
+                    <div className="w-16 h-16 bg-blue-500/20 text-blue-400 rounded-2xl flex items-center justify-center mx-auto mb-6">
+                        <Layers className="w-8 h-8" />
+                    </div>
+                    <h2 className="text-3xl font-black text-white mb-4 uppercase tracking-tighter">Workflow Studio<br/><span className="text-blue-500">Coming Soon</span></h2>
+                    <p className="text-slate-400 font-medium text-lg leading-relaxed mb-8">
+                        The visual drag-and-drop Workflow engine is currently under construction. Stay tuned to build advanced node-based chat logic!
+                    </p>
+                    <Link href={`/agents`} className="inline-block px-8 py-4 bg-blue-600 text-white font-black rounded-xl hover:bg-blue-500 transition shadow-lg hover:-translate-y-1">
+                        Go Back
+                    </Link>
+                </div>
+            </div>
+            
+            {/* Blurred Studio */}
+            <div className="w-full h-full pointer-events-none opacity-40 blur-sm select-none">
+                <ReactFlowProvider>
+                    <WorkflowCanvas />
+                </ReactFlowProvider>
+            </div>
+        </div>
     );
 }

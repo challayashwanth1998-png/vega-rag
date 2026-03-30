@@ -39,12 +39,12 @@ export default function HomePage() {
             <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 text-[11px] font-black uppercase tracking-widest mb-8">
               <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" /> Open-source · Self-host on AWS Fargate
             </div>
-            <h1 className="text-4xl md:text-6xl font-black tracking-tighter leading-[0.9] text-slate-900 mb-8">
-              The open-source engine<br />
-              <span className="text-blue-600 underline decoration-blue-500 decoration-4 underline-offset-8 font-black tracking-tighter uppercase italic">for shipping AI agents.</span>
+            <h1 className="text-4xl md:text-6xl font-black tracking-tighter leading-tight text-slate-900 mb-8">
+              The open-source platform<br />
+              <span className="inline-block pt-3 text-blue-600 underline decoration-blue-500 decoration-4 underline-offset-8 font-black tracking-tighter uppercase italic">for AI chat agents.</span>
             </h1>
             <p className="text-xl md:text-2xl text-slate-500 font-medium leading-relaxed max-w-2xl mx-auto mb-12">
-              Deploy intelligent LLM agents instantly. Start for free on our managed cloud, or self-host natively in your own AWS account.
+              Deploy intelligent RAG chat agents powered by your own data. Start for free on our managed cloud, or self-host natively inside your own AWS account.
             </p>
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
               <button onClick={() => auth.signinRedirect()}
