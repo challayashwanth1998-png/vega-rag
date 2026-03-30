@@ -28,13 +28,13 @@ export function ChatBox({ botId, hasSources = false }: { botId: string, hasSourc
   const [sessionId] = useState(() => typeof crypto !== 'undefined' ? crypto.randomUUID() : Math.random().toString(36).substring(7));
 
   useEffect(() => {
-    if (messages.length <= 1) {
+    if (messages.length <= 1 && config) {
        setMessages([{ 
            role: "agent", 
-           content: hasSources ? "Hello! Memory sync complete. Ask me anything about the data you uploaded!" : "Hi! My brain is empty. Please add a Data Source to begin."
+           content: config.welcome_message || (hasSources ? "Hello! Memory sync complete. Ask me anything about the data you uploaded!" : "Hi! My brain is empty. Please add a Data Source to begin.")
        }]);
     }
-  }, [hasSources]);
+  }, [hasSources, config]);
 
   useEffect(() => {
     const handleSync = () => {

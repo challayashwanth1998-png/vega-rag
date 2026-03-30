@@ -9,15 +9,15 @@ import { motion } from "framer-motion";
 const navItems = [
   { name: "Agents", href: "/agents", icon: BotMessageSquare },
   { name: "Usage Analytics", href: "/usage", icon: BarChart3 },
-  { name: "Workspace Settings", href: "/settings", icon: Settings },
+  { name: "Settings", href: "/settings", icon: Settings },
 ];
 
 export function Sidebar() {
   const pathname = usePathname() || "";
   const auth = useAuth();
 
-  const creditsUsed = 18;
-  const creditsTotal = 50;
+  const creditsUsed = 18400;
+  const creditsTotal = 250000;
   const percent = Math.round((creditsUsed / creditsTotal) * 100);
 
   // Hide the global sidebar when inside a specific agent's detailed view
@@ -60,8 +60,8 @@ export function Sidebar() {
       {/* Usage Meter Widget */}
       <div className="p-4 mx-4 mb-4 bg-white rounded-xl border border-slate-200 shadow-sm">
         <div className="flex justify-between items-center mb-2">
-          <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Credits</span>
-          <span className="text-xs font-bold text-slate-700">{creditsUsed} / {creditsTotal}</span>
+          <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Tokens</span>
+          <span className="text-xs font-bold text-slate-700">18.4k / 250k</span>
         </div>
         <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden relative">
           <motion.div

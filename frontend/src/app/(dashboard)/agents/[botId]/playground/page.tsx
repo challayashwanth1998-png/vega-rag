@@ -22,11 +22,17 @@ export default function PlaygroundPage({ params }: { params: any }) {
   const { data: config, mutate: mutateConfig } = useSWR(`http://localhost:8000/api/agents/${botId}/config`, fetcher);
 
   const [promptInput, setPromptInput] = useState("");
+  const [nameInput, setNameInput] = useState("");
+  const [welcomeInput, setWelcomeInput] = useState("");
   const [isSaving, setIsSaving] = useState(false);
 
-  // Sync DB config to text box initially
+  // Sync DB config to exact text boxes initially
   useEffect(() => {
-     if (config?.system_prompt && !promptInput) setPromptInput(config.system_prompt);
+     if (config) {
+        if (!promptInput) setPromptInput(config.system_prompt || "");
+        if (!nameInput) setNameInput(config.name || "Custom Agent");
+        if (!welcomeInput) setWelcomeInput(config.welcome_message || "Hi! How can I assist you today?");
+     }
   }, [config]);
 
   const handleSave = async () => {
@@ -39,7 +45,8 @@ export default function PlaygroundPage({ params }: { params: any }) {
         body: JSON.stringify({ 
            system_prompt: promptInput,
            brand_color: config?.brand_color || "#2563eb",
-           name: config?.name || "Agent"
+           name: nameInput,
+           welcome_message: welcomeInput
         })
       });
       mutateConfig();
@@ -57,12 +64,32 @@ export default function PlaygroundPage({ params }: { params: any }) {
              <div className="p-2.5 bg-blue-50 text-blue-600 rounded-xl border border-blue-100"><SlidersHorizontal className="w-5 h-5" /></div>
              <h2 className="text-xl font-bold text-slate-800 tracking-tight">Guardrails</h2>
           </div>
-          <button disabled={isSaving || !promptInput || promptInput === config?.system_prompt} onClick={handleSave} className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold text-sm transition disabled:opacity-50 shadow-sm flex items-center justify-center min-w-[80px]">
+          <button disabled={isSaving || (promptInput === config?.system_prompt && nameInput === config?.name && welcomeInput === config?.welcome_message)} onClick={handleSave} className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold text-sm transition disabled:opacity-50 shadow-sm flex items-center justify-center min-w-[80px]">
             {isSaving ? <Loader2 className="w-4 h-4 animate-spin"/> : "Save Profile"}
           </button>
         </div>
         
         <div className="flex-1 overflow-y-auto p-6 space-y-6">
+          <div className="pb-6 border-b border-slate-100">
+            <label className="text-xs font-bold text-blue-600 uppercase tracking-wider mb-2 flex items-center gap-1.5"><Settings2 className="w-4 h-4"/> Chatbot Name</label>
+            <input 
+              type="text"
+              value={nameInput}
+              onChange={(e) => setNameInput(e.target.value)}
+              placeholder="e.g. Sales Assistant"
+              className="w-full p-4 rounded-xl border border-slate-200 bg-slate-50 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 bg-white outline-none text-sm font-bold text-slate-800 transition-all shadow-inner"
+            />
+            
+            <label className="text-xs font-bold text-blue-600 uppercase tracking-wider mb-2 flex items-center gap-1.5 mt-6"><Settings2 className="w-4 h-4"/> Welcome Message</label>
+            <textarea 
+              rows={3} 
+              value={welcomeInput}
+              onChange={(e) => setWelcomeInput(e.target.value)}
+              placeholder="Hi! How can I assist you today?"
+              className="w-full p-4 rounded-xl border border-slate-200 bg-slate-50 focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none text-sm font-medium text-slate-700 resize-none transition-all shadow-inner leading-relaxed"
+            />
+          </div>
+
           <div>
             <label className="text-xs font-bold text-blue-600 uppercase tracking-wider mb-2 flex items-center gap-1.5"><ShieldCheck className="w-4 h-4"/> Persona Presets</label>
             <p className="text-sm text-slate-500 mb-4 leading-relaxed">Instantly force your Amazon Nova Micro LLM into specific behavioral guardrails by clicking a template below.</p>

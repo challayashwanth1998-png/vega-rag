@@ -17,6 +17,7 @@ class UpdateConfigReq(BaseModel):
     system_prompt: str
     brand_color: str = "#2563eb"
     name: str = "My Custom Agent"
+    welcome_message: str = "Hi! How can I assist you today?"
 
 
 class WorkflowReq(BaseModel):

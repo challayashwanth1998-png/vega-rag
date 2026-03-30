@@ -28,7 +28,7 @@ export default function UsagePage() {
   })) || [];
 
   const totalTokensUsed = agentTokens.reduce((sum: number, a: any) => sum + a.tokens, 0);
-  const tokenLimit = 100000;
+  const tokenLimit = 250000;
   const usagePercent = Math.min(100, Math.round((totalTokensUsed / tokenLimit) * 100));
 
   const stats = [

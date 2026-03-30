@@ -46,15 +46,14 @@ export default function AnalyticsPage({ params }: { params: any }) {
           
           <div className="col-span-1 md:col-span-2 bg-white rounded-3xl p-6 border border-slate-200 shadow-sm relative overflow-hidden">
              <div className="absolute top-0 right-0 p-6 opacity-5"><Bot className="w-24 h-24" /></div>
-             <p className="text-sm font-bold text-slate-400 uppercase tracking-widest mb-1">Monthly Customer Quota ($0.10 AWS Limit)</p>
+             <p className="text-sm font-bold text-slate-400 uppercase tracking-widest mb-1">Agent Lifetime Inference</p>
              <div className="flex items-end gap-3 mb-4">
                <h3 className="text-3xl font-extrabold text-slate-800">{totalTokens.toLocaleString()}</h3>
-               <p className="text-lg font-bold text-slate-400 mb-1">/ {TOKEN_LIMIT_PER_MONTH.toLocaleString()} Tokens</p>
+               <p className="text-lg font-bold text-slate-400 mb-1">Tokens Processed</p>
              </div>
-             <div className="w-full h-3 bg-slate-100 rounded-full overflow-hidden mb-2">
-                <div className="h-full bg-gradient-to-r from-emerald-400 to-blue-600 rounded-full transition-all duration-1000" style={{ width: `${tokenPercentage}%` }} />
-             </div>
-             <p className="text-xs font-bold text-blue-600 tracking-wide">{tokenPercentage}% of Allocation Used (Resets in 14 days)</p>
+             <p className="text-xs font-bold text-blue-600 tracking-wide mt-auto pt-4 flex items-center gap-2">
+                <Bot className="w-4 h-4" /> Usage accrues toward your global 250k workspace limit.
+             </p>
           </div>
        </div>
 

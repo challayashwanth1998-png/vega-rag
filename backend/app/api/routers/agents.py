@@ -126,6 +126,7 @@ def update_agent_config(bot_id: str, req: UpdateConfigReq):
         "system_prompt": req.system_prompt,
         "brand_color": req.brand_color,
         "name": req.name,
+        "welcome_message": req.welcome_message,
     })
     return {"status": "saved"}
 
@@ -140,6 +141,7 @@ def get_agent_config(bot_id: str):
         "system_prompt": "You are a brilliant, concise AI assistant. Answer accurately based strictly on the context provided.",
         "brand_color": "#2563eb",
         "name": "Custom Agent",
+        "welcome_message": "Hi! How can I assist you today?",
     }
 
 
