@@ -15,7 +15,7 @@ cd ..
 
 echo "🚀 Building Frontend..."
 cd frontend
-docker build --platform linux/amd64 --build-arg NEXT_PUBLIC_API_URL="" -t vegarag-frontend .
+docker build --platform linux/amd64 --build-arg NEXT_PUBLIC_API_URL="$APIBASEURL" -t vegarag-frontend .
 docker tag vegarag-frontend:latest $ECR_REGISTRY/vegarag-frontend:latest
 docker push $ECR_REGISTRY/vegarag-frontend:latest
 cd ..

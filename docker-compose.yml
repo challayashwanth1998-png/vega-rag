@@ -31,12 +31,12 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
       args:
-        # Bake the local backend URL into the Next.js static build
-        - NEXT_PUBLIC_API_URL=http://localhost:8000
+        # Bake the backend URL into the Next.js static build
+        - NEXT_PUBLIC_API_URL=${API_BASE_URL:-http://localhost:8000}
     ports:
       - "3000:3000"
     environment:
-      - NEXT_PUBLIC_API_URL=http://localhost:8000
+      - NEXT_PUBLIC_API_URL=${API_BASE_URL:-http://localhost:8000}
     volumes:
       - ./frontend:/app
       - /app/node_modules

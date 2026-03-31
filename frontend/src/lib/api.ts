@@ -1,16 +1,16 @@
 /**
  * Centralized API client for VegaRAG backend.
  *
- * Local dev:  NEXT_PUBLIC_API_URL is unset → defaults to http://localhost:8000
- * Production: NEXT_PUBLIC_API_URL is set to the ALB DNS or CloudFront origin
- *             (injected via ECS task environment variables)
+ * Local dev:  Uses Next.js rewrites (/api proxy) if variables are unset.
+ * Production: Uses relative paths (e.g. /api/agents) by default.
+ *             Optionally override with NEXT_PUBLIC_API_URL for cross-domain.
  *
  * Usage:
  *   import { api } from "@/lib/api";
  *   const agents = await api.agents.list(userEmail);
  */
 
-const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? process.env.NEXT_PUBLIC_APIBASEURL ?? "";
 
 // ── Generic helpers ────────────────────────────────────────────────────────
 

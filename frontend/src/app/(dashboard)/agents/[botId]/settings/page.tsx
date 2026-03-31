@@ -1,5 +1,6 @@
 "use client";
 
+import { api } from "@/lib/api";
 import { use, useEffect, useState } from "react";
 import useSWR from "swr";
 import { Settings, Save, Trash2, Loader2, PaintBucket } from "lucide-react";
@@ -12,7 +13,7 @@ export default function SettingsPage({ params }: { params: any }) {
   const botId = resolvedParams.botId;
   const router = useRouter();
 
-  const { data: config, mutate } = useSWR(`http://localhost:8000/api/agents/${botId}/config`, fetcher);
+  const { data: config, mutate } = useSWR(`${api.baseUrl}/api/agents/${botId}/config`, fetcher);
 
   const [name, setName] = useState("");
   const [color, setColor] = useState("#2563eb");
@@ -28,7 +29,7 @@ export default function SettingsPage({ params }: { params: any }) {
   const handleSave = async () => {
     setIsSaving(true);
     try {
-      await fetch(`http://localhost:8000/api/agents/${botId}/config`, {
+      await fetch(`${api.baseUrl}/api/agents/${botId}/config`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ 

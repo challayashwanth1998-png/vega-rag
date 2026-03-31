@@ -7,6 +7,8 @@ import useSWR from "swr";
 
 const fetcher = (url: string) => fetch(url).then(r => r.json());
 
+import { api } from "@/lib/api";
+
 const PRESETS = [
   { id: "support", icon: HeartHandshake, name: "Customer Service", desc: "Friendly, polite, redirects to support.", prompt: "You are a warm, polite Customer Success Agent. Always use the retrieved context to answer. If you cannot find the answer in the context, do NOT make one up. Instead, politely apologize and tell the user to email support@company.com for further assistance." },
   { id: "sales", icon: Briefcase, name: "SaaS Sales AI", desc: "Aggressive lead generation focus.", prompt: "You are a highly persuasive SaaS Sales Engineer. Answer questions briefly using the context. No matter what the user asks, constantly pivot the conversation and strongly encourage the user to provide their email address to book a real demo with the human sales team." },
@@ -18,8 +20,8 @@ export default function PlaygroundPage({ params }: { params: any }) {
   const botId = resolvedParams.botId;
 
   // Real-time polling to unlock ChatBox
-  const { data: sources } = useSWR(`http://localhost:8000/api/agents/${botId}/sources`, fetcher, { refreshInterval: 5000 });
-  const { data: config, mutate: mutateConfig } = useSWR(`http://localhost:8000/api/agents/${botId}/config`, fetcher);
+  const { data: sources } = useSWR(`${api.baseUrl}/api/agents/${botId}/sources`, fetcher, { refreshInterval: 5000 });
+  const { data: config, mutate: mutateConfig } = useSWR(`${api.baseUrl}/api/agents/${botId}/config`, fetcher);
 
   const [promptInput, setPromptInput] = useState("");
   const [nameInput, setNameInput] = useState("");
@@ -39,7 +41,7 @@ export default function PlaygroundPage({ params }: { params: any }) {
     if (!promptInput.trim()) return;
     setIsSaving(true);
     try {
-      await fetch(`http://localhost:8000/api/agents/${botId}/config`, {
+      await fetch(`${api.baseUrl}/api/agents/${botId}/config`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ 
