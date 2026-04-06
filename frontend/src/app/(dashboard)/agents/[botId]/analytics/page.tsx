@@ -15,14 +15,13 @@ export default function AnalyticsPage({ params }: { params: any }) {
   const { data: analytics } = useSWR(`${api.baseUrl}/api/agents/${botId}/analytics`, fetcher, { refreshInterval: 5000 });
 
   const totalQueries = analytics?.reduce((sum: number, item: any) => sum + item.queries, 0) || 0;
+  const totalTokens = analytics?.reduce((sum: number, item: any) => sum + (item.tokens || 0), 0) || 0;
 
   // AWS Architecture Budgeting
   // Max Customer Spend: $0.10/mo.
   // Fargate/DynamoDB/Pinecone Share: ~$0.05/mo
   // LLM Allocate (Nova Micro/Titan): ~$0.05/mo -> 250,000 Tokens limit
-  const EST_TOKENS_PER_QUERY = 1540; // 1,500 average context tokens + Titan embeddings
   const TOKEN_LIMIT_PER_MONTH = 250000; 
-  const totalTokens = totalQueries * EST_TOKENS_PER_QUERY;
   const tokenPercentage = Math.min(100, Math.max(0, (totalTokens / TOKEN_LIMIT_PER_MONTH) * 100)).toFixed(1);
 
   return (
@@ -42,7 +41,7 @@ export default function AnalyticsPage({ params }: { params: any }) {
                </div>
                <p className="text-sm font-bold text-slate-400 uppercase tracking-widest leading-tight">Total Queries<br/><span className="text-slate-700 text-xl font-extrabold">{totalQueries}</span></p>
              </div>
-             <p className="text-xs font-semibold text-slate-500 bg-slate-100 p-2 rounded-lg">~{EST_TOKENS_PER_QUERY.toLocaleString()} Tokens Extracted Per Query</p>
+             <p className="text-xs font-semibold text-slate-500 bg-slate-100 p-2 rounded-lg">Real-Time Tokens Tracked</p>
           </div>
           
           <div className="col-span-1 md:col-span-2 bg-white rounded-3xl p-6 border border-slate-200 shadow-sm relative overflow-hidden">

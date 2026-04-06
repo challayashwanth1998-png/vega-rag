@@ -3,8 +3,14 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { LayoutGrid, BarChart3, Settings, LogOut, BotMessageSquare } from "lucide-react";
-import { useAuth } from "react-oidc-context";
+import { useAuth } from "@/components/Providers";
 import { motion } from "framer-motion";
+import useSWR from "swr";
+import { api } from "@/lib/api";
+
+const fetcher = (url: string) => fetch(url).then((res) => res.json());
+
+const TOKEN_LIMIT = 250000;
 
 const navItems = [
   { name: "Agents", href: "/agents", icon: BotMessageSquare },
@@ -15,13 +21,47 @@ const navItems = [
 export function Sidebar() {
   const pathname = usePathname() || "";
   const auth = useAuth();
+  const user_email = auth.user?.profile?.email || auth.user?.profile?.sub || "private_user";
 
-  const creditsUsed = 18400;
-  const creditsTotal = 250000;
-  const percent = Math.round((creditsUsed / creditsTotal) * 100);
+  // Fetch user's agents list
+  const { data: agents } = useSWR(
+    user_email ? `${api.baseUrl}/api/agents?user_email=${encodeURIComponent(user_email)}` : null,
+    fetcher,
+    { revalidateOnFocus: true }
+  );
+
+  // Fetch analytics for ALL agents in parallel using SWR
+  const agentIds: string[] = (agents ?? []).map((a: any) => a.bot_id);
+  const { data: rawAnalytics } = useSWR(
+    agentIds.length > 0 ? `analytics-all-${agentIds.join(",")}` : null,
+    () =>
+      Promise.all(
+        agentIds.map((id) =>
+          fetch(`${api.baseUrl}/api/agents/${id}/analytics`).then((r) => r.json())
+        )
+      ),
+    { revalidateOnFocus: true }
+  );
+
+  // Sum real tokens
+  const totalTokens = (agents ?? []).reduce((sum: number, _a: any, i: number) => {
+    const days: any[] = (rawAnalytics ?? [])[i] ?? [];
+    const real = days.reduce((s: number, d: any) => s + (d.tokens ?? 0), 0);
+    return sum + real;
+  }, 0);
+  const percent = Math.min(100, Math.round((totalTokens / TOKEN_LIMIT) * 100));
+  const displayCredits = totalTokens > 0 ? (totalTokens / 1000).toFixed(1) + "k" : "0";
+
+  // 30-day reset cycle from earliest agent creation
+  const accountCreationMs =
+    (agents?.length ?? 0) > 0
+      ? Math.min(...agents.map((a: any) => new Date(a.createdAt).getTime()))
+      : Date.now();
+  const daysSinceCreation = Math.floor((Date.now() - accountCreationMs) / (1000 * 60 * 60 * 24));
+  const daysUntilReset = 30 - (daysSinceCreation % 30);
 
   // Hide the global sidebar when inside a specific agent's detailed view
-  if (pathname.startsWith('/agents/') && pathname !== '/agents') {
+  if (pathname.startsWith("/agents/") && pathname !== "/agents") {
     return null;
   }
 
@@ -61,7 +101,7 @@ export function Sidebar() {
       <div className="p-4 mx-4 mb-4 bg-white rounded-xl border border-slate-200 shadow-sm">
         <div className="flex justify-between items-center mb-2">
           <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Tokens</span>
-          <span className="text-xs font-bold text-slate-700">18.4k / 250k</span>
+          <span className="text-xs font-bold text-slate-700">{displayCredits} / 250k</span>
         </div>
         <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden relative">
           <motion.div
@@ -71,7 +111,7 @@ export function Sidebar() {
             className="absolute top-0 left-0 h-full bg-gradient-to-r from-blue-500 to-cyan-500 rounded-full"
           />
         </div>
-        <p className="text-[10px] text-slate-400 mt-2 text-center font-medium">Free tier resets in 12 days</p>
+        <p className="text-[10px] text-slate-400 mt-2 text-center font-medium">Free tier resets in {daysUntilReset} days</p>
       </div>
 
       {/* User Profile */}
@@ -82,12 +122,8 @@ export function Sidebar() {
           </div>
           <span className="text-sm font-medium truncate">{auth.user?.profile?.email || "Authenticated"}</span>
         </div>
-        <button 
-          onClick={() => {
-            const logoutUrl = `https://us-east-1b7zudvphb.auth.us-east-1.amazoncognito.com/logout?client_id=40ps5mipuj6g2vhhec9skkiog2&logout_uri=${encodeURIComponent(window.location.origin)}`;
-            auth.removeUser(); // Clear local state first
-            window.location.href = logoutUrl;
-          }} 
+        <button
+          onClick={() => auth.signoutRedirect()}
           className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-md transition"
         >
           <LogOut className="w-4 h-4" />

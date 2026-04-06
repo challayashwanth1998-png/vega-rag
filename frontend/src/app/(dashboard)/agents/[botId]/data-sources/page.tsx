@@ -1,9 +1,10 @@
 "use client";
+import Link from "next/link";
 import { use, useRef, useState } from "react";
 import useSWR from "swr";
 import {
   Database, Link2, Loader2, Globe, FileText, CheckCircle2,
-  Upload, X, TableProperties, FileSpreadsheet,
+  Upload, X, TableProperties, FileSpreadsheet, Pencil, Save, Trash2
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { api, type SourceRecord } from "@/lib/api";
@@ -33,6 +34,11 @@ export default function DataSourcesPage({ params }: { params: any }) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg]         = useState("");
 
+  const [schemaModalFile, setSchemaModalFile] = useState<string | null>(null);
+  const [schemaColumns, setSchemaColumns] = useState<string[]>([]);
+  const [schemaExplanations, setSchemaExplanations] = useState<Record<string, string>>({});
+  const [isSavingSchema, setIsSavingSchema] = useState(false);
+
   const pdfInputRef   = useRef<HTMLInputElement>(null);
   const tableInputRef = useRef<HTMLInputElement>(null);
 
@@ -46,7 +52,35 @@ export default function DataSourcesPage({ params }: { params: any }) {
 
   const addOptimistic = (url: string, sk: string) => {
     const opt: SourceRecord = { SK: sk, url, status: "Syncing...", chunks: 0 };
-    mutate([opt, ...(sources ?? [])], false);
+    const filteredSources = (sources ?? []).filter(s => s.SK !== sk);
+    mutate([opt, ...filteredSources], false);
+  };
+
+  const saveSchema = async () => {
+    if (!schemaModalFile) return;
+    setIsSavingSchema(true);
+    try {
+      await api.tables.updateSchema(botId, schemaModalFile, schemaExplanations);
+      setSchemaModalFile(null);
+    } catch (e: any) {
+      setErrorMsg("Failed to save schema: " + e.message);
+    }
+    setIsSavingSchema(false);
+  };
+
+  const handleDeleteSource = async (sk: string) => {
+    if (!confirm("Are you sure you want to permanently delete this data source?")) return;
+    
+    // Optimistic deletion
+    const filteredSources = (sources ?? []).filter((s) => s.SK !== sk);
+    mutate(filteredSources, false);
+
+    try {
+      await api.agents.deleteSource(botId, sk);
+    } catch (e: any) {
+      setErrorMsg("Failed to delete source: " + e.message);
+    }
+    mutate();
   };
 
   // ── Handlers ────────────────────────────────────────────────────────────────
@@ -80,7 +114,16 @@ export default function DataSourcesPage({ params }: { params: any }) {
     try {
       const res = await uploadFn(file, botId);
       if (!res.ok) { const err = await res.json(); throw new Error(err.detail ?? "Upload failed"); }
+      
+      let data = null;
+      try { data = await res.json(); } catch (e) { }
       clearFn();
+
+      if (label === "Table" && data && data.columns && data.filename) {
+          setSchemaModalFile(data.filename);
+          setSchemaColumns(data.columns);
+          setSchemaExplanations({});
+      }
     } catch (e: any) { setErrorMsg(e.message); }
     mutate(); setIsSubmitting(false);
   };
@@ -301,6 +344,18 @@ export default function DataSourcesPage({ params }: { params: any }) {
                       </p>
                     </div>
                   </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button onClick={() => handleDeleteSource(s.SK)} className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-md transition" title="Delete Source">
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                    {(s.url?.startsWith("Table:") || s.url?.startsWith("CSV:")) && s.status === "Synced" && (
+                      <Link
+                        href={`/agents/${botId}/data-sources/schema/${encodeURIComponent(s.url.replace("Table: ", "").replace("CSV: ", ""))}`}
+                        className="flex items-center gap-1.5 text-[11px] font-bold text-blue-700 bg-blue-100 hover:bg-blue-200 px-3 py-1.5 rounded-md uppercase tracking-wider transition"
+                      >
+                        <Pencil className="w-3 h-3" /> Schema
+                      </Link>
+                    )}
                   {s.status === "Synced" ? (
                     <span className="flex items-center gap-1.5 text-[11px] font-bold text-emerald-700 bg-emerald-100 px-3 py-1.5 rounded-md shrink-0 uppercase tracking-wider">
                       <CheckCircle2 className="w-3.5 h-3.5" /> Synced
@@ -312,12 +367,71 @@ export default function DataSourcesPage({ params }: { params: any }) {
                       <Loader2 className="w-3.5 h-3.5 animate-spin" /> Syncing
                     </span>
                   )}
+                  </div>
                 </motion.div>
               ))}
             </AnimatePresence>
           </div>
         </div>
       </div>
+
+      {/* ── Schema Explanation Modal ── */}
+      <AnimatePresence>
+        {schemaModalFile && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 10 }}
+              className="bg-white rounded-3xl shadow-2xl overflow-hidden w-full max-w-3xl max-h-[90vh] flex flex-col"
+            >
+              <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+                <div>
+                  <h2 className="text-xl font-bold text-slate-800">Map Table Columns</h2>
+                  <p className="text-sm text-slate-500 mt-1">Provide plain-English context to help the SQL agent understand your data.</p>
+                </div>
+                <button onClick={() => setSchemaModalFile(null)} className="p-2 text-slate-400 hover:text-slate-600 bg-white rounded-lg border border-slate-200">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              
+              <div className="p-6 overflow-y-auto flex-1 bg-slate-50/50 min-h-0">
+                <div className="space-y-4">
+                  {schemaColumns.map((col) => (
+                    <div key={col} className="bg-white p-4 rounded-2xl border border-slate-200 flex flex-col md:flex-row gap-4 items-center">
+                      <div className="w-full md:w-1/3">
+                        <span className="text-xs font-black text-slate-400 uppercase tracking-widest block mb-1">Column Name</span>
+                        <code className="text-sm font-bold text-blue-700 bg-blue-50 px-2 py-1 rounded-md max-w-full block truncate" title={col}>{col}</code>
+                      </div>
+                      <div className="w-full md:w-2/3">
+                        <span className="text-xs font-black text-slate-400 uppercase tracking-widest block mb-1">AI Description</span>
+                        <input 
+                           type="text" 
+                           placeholder="e.g. Total order amount in USD"
+                           value={schemaExplanations[col] || ""}
+                           onChange={e => setSchemaExplanations(prev => ({ ...prev, [col]: e.target.value }))}
+                           className="w-full px-4 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 text-sm font-medium text-slate-700 placeholder-slate-400"
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="p-6 border-t border-slate-100 bg-white flex justify-between items-center shrink-0">
+                <button onClick={() => setSchemaModalFile(null)} className="px-6 py-2.5 text-sm font-bold text-slate-500 hover:text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition">
+                  I'll do it later
+                </button>
+                <button onClick={saveSchema} disabled={isSavingSchema} className="px-8 py-2.5 text-sm font-bold bg-blue-600 hover:bg-blue-700 text-white rounded-xl shadow-md transition disabled:opacity-50 flex items-center gap-2">
+                  {isSavingSchema ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                  Save Schema
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
     </div>
   );
 }

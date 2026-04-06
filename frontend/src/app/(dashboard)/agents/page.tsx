@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Plus, Bot, Clock, ArrowRight, Loader2, X } from "lucide-react";
 import Link from "next/link";
 import useSWR from "swr";
-import { useAuth } from "react-oidc-context";
+import { useAuth } from "@/components/Providers";
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 

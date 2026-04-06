@@ -1,7 +1,7 @@
 # ==========================================
 # Next.js Frontend Dockerfile (AWS Fargate Ready)
 # ==========================================
-FROM node:20-alpine AS builder
+FROM --platform=linux/amd64 node:20-slim AS builder
 WORKDIR /app
 
 # Transfer dependency configurations
@@ -18,7 +18,7 @@ ENV NEXT_TELEMETRY_DISABLED=1
 RUN NODE_OPTIONS="--max-old-space-size=4096" npm run build
 
 # Stage 2: Execute strictly via lightweight runner
-FROM node:20-alpine AS runner
+FROM --platform=linux/amd64 node:20-slim AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1

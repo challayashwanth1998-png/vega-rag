@@ -13,6 +13,7 @@ export function AgentSidebar({ botId }: { botId: string }) {
     { name: "Data Sources", href: `/agents/${botId}/data-sources`, icon: Database },
     { name: "Workflow Studio", href: `/agents/${botId}/workflow`, icon: Layers },
     { name: "Deploy", href: `/agents/${botId}/deploy`, icon: Rocket },
+    { name: "Users", href: `/agents/${botId}/users`, icon: Users },
     { name: "Settings", href: `/agents/${botId}/settings`, icon: Settings },
   ];
 

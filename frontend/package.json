@@ -9,6 +9,7 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "aws-amplify": "^6.16.3",
     "clsx": "^2.1.1",
     "framer-motion": "^12.38.0",
     "lucide-react": "^0.469.0",
@@ -31,5 +32,9 @@
     "eslint-config-next": "16.2.1",
     "tailwindcss": "^4",
     "typescript": "^5"
+  },
+  "optionalDependencies": {
+    "@next/swc-linux-x64-gnu": "16.2.1",
+    "@next/swc-linux-x64-musl": "16.2.1"
   }
 }

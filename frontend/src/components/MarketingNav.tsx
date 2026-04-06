@@ -1,16 +1,16 @@
 "use client";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useAuth } from "react-oidc-context";
+import { useAuth } from "@/components/Providers";
 import { Bot, Github, Menu, X } from "lucide-react";
 import { useState } from "react";
 
 const NAV_LINKS = [
   { label: "How it Works", href: "/features" },
   { label: "How to Deploy", href: "/deploy" },
-  { label: "Pricing",      href: "/pricing" },
-  { label: "My Story",     href: "/story" },
-  { label: "Blog",         href: "/blog" },
+  { label: "Pricing", href: "/pricing" },
+  { label: "My Story", href: "/story" },
+  { label: "Blog", href: "/blog" },
 ];
 
 export function MarketingNav() {
@@ -36,11 +36,10 @@ export function MarketingNav() {
             <Link
               key={href}
               href={href}
-              className={`text-sm font-semibold transition ${
-                pathname === href
+              className={`text-sm font-semibold transition ${pathname === href
                   ? "text-blue-600"
                   : "text-slate-600 hover:text-blue-600"
-              }`}
+                }`}
             >
               {label}
             </Link>
@@ -90,9 +89,8 @@ export function MarketingNav() {
               key={href}
               href={href}
               onClick={() => setIsOpen(false)}
-              className={`text-base font-semibold transition ${
-                pathname === href ? "text-blue-600" : "text-slate-700 hover:text-blue-600"
-              }`}
+              className={`text-base font-semibold transition ${pathname === href ? "text-blue-600" : "text-slate-700 hover:text-blue-600"
+                }`}
             >
               {label}
             </Link>

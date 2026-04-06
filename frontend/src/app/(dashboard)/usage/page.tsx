@@ -4,7 +4,7 @@ import { motion } from "framer-motion";
 import { BarChart3, Zap, Brain, Activity, ArrowUpRight, TrendingUp } from "lucide-react";
 import useSWR from "swr";
 import { api } from "@/lib/api";
-import { useAuth } from "react-oidc-context";
+import { useAuth } from "@/components/Providers";
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
 
@@ -18,14 +18,27 @@ export default function UsagePage() {
   );
 
   const activeAgentsCount = agents?.length || 0;
-  
-  // Dynamic Token Mapping based on real agents list
-  const agentTokens = agents?.map((a: any, i: number) => ({
-    name: a.name,
-    id: a.bot_id,
-    tokens: (i + 1) * 3800 + (a.name.length * 5), // Simulation based on agent index
-    queries: (i + 1) * 10 + 2
-  })) || [];
+
+  // Fetch analytics for every agent in parallel to get real token counts
+  const agentIds: string[] = (agents ?? []).map((a: any) => a.bot_id);
+  const { data: rawAnalytics } = useSWR(
+    agentIds.length > 0 ? `analytics-all-${agentIds.join(",")}` : null,
+    () =>
+      Promise.all(
+        agentIds.map((id) =>
+          fetch(`${api.baseUrl}/api/agents/${id}/analytics`).then((r) => r.json())
+        )
+      ),
+    { revalidateOnFocus: true }
+  );
+
+  // Zip agents + analytics results — both arrays are parallel-indexed
+  const agentTokens = (agents ?? []).map((a: any, i: number) => {
+    const days: any[] = (rawAnalytics ?? [])[i] ?? [];
+    const tokens = days.reduce((s: number, d: any) => s + (d.tokens ?? 0), 0);
+    const queries = days.reduce((s: number, d: any) => s + (d.queries ?? 0), 0);
+    return { name: a.name, id: a.bot_id, tokens, queries };
+  });
 
   const totalTokensUsed = agentTokens.reduce((sum: number, a: any) => sum + a.tokens, 0);
   const tokenLimit = 250000;

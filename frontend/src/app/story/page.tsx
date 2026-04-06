@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 
+import { Calendar } from "lucide-react";
 import { MarketingNav } from "@/components/MarketingNav";
 
 export const metadata: Metadata = {
@@ -51,14 +52,20 @@ export default function StoryPage() {
                 <span className="text-slate-500 font-bold tracking-tight">AI Engineer & Architect | Specialist in Multi-Agent RAG | Ex-HPE</span>
               </div>
               <div className="flex-1" />
-              <div className="flex flex-col sm:flex-row gap-4 w-full sm:w-auto">
-                <a href="https://www.linkedin.com/in/challa-yashwanth-06bb3813a/" target="_blank" rel="noopener noreferrer"
-                  className="px-8 py-4 bg-blue-600 text-white font-black rounded-2xl hover:bg-blue-700 transition flex-1 text-center shadow-md">
-                  LinkedIn
-                </a>
-                <a href="https://thechalla.vercel.app/" target="_blank" rel="noopener noreferrer"
-                  className="px-8 py-4 bg-slate-900 text-white font-black rounded-2xl hover:bg-slate-800 transition flex-1 text-center shadow-md">
-                  Portfolio
+              <div className="flex flex-col gap-4 w-full sm:w-auto">
+                <div className="flex flex-col sm:flex-row gap-4">
+                  <a href="https://www.linkedin.com/in/challa-yashwanth-06bb3813a/" target="_blank" rel="noopener noreferrer"
+                    className="px-8 py-4 bg-blue-600 text-white font-black rounded-2xl hover:bg-blue-700 transition flex-1 text-center shadow-md whitespace-nowrap">
+                    LinkedIn
+                  </a>
+                  <a href="https://thechalla.vercel.app/" target="_blank" rel="noopener noreferrer"
+                    className="px-8 py-4 bg-slate-900 text-white font-black rounded-2xl hover:bg-slate-800 transition flex-1 text-center shadow-md whitespace-nowrap">
+                    Portfolio
+                  </a>
+                </div>
+                <a href="https://calendly.com/challa-yashwanth1998/30min" target="_blank" rel="noopener noreferrer"
+                  className="px-8 py-4 bg-emerald-600 text-white font-black rounded-2xl hover:bg-emerald-700 transition w-full text-center shadow-md flex items-center justify-center gap-2">
+                  <Calendar className="w-5 h-5 text-emerald-200" /> Book a meeting with me
                 </a>
               </div>
             </div>

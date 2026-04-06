@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useAuth } from "react-oidc-context";
+import { useAuth } from "@/components/Providers";
 import { Bot, CheckCircle2, Github, ArrowRight, Zap, Shield, Server, Terminal } from "lucide-react";
 import { MarketingNav } from "@/components/MarketingNav";
 
