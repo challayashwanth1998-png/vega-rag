@@ -1,5 +1,54 @@
-node_modules/
+# ── Secrets / environment ─────────────────────────────────────────────────────
 .env
+.env.local
+.env.*.local
+*.pem
+*.key
+
+# ── Python ───────────────────────────────────────────────────────────────────
 __pycache__/
+*.py[cod]
+*.pyo
+.Python
 venv/
+.venv/
+env/
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+
+# ── Node / Next.js ───────────────────────────────────────────────────────────
+node_modules/
 .next/
+.pnpm-store/
+out/
+*.tsbuildinfo
+.turbo/
+
+# ── Docker ───────────────────────────────────────────────────────────────────
+.dockerignore
+
+# ── macOS ────────────────────────────────────────────────────────────────────
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# ── IDE ──────────────────────────────────────────────────────────────────────
+.idea/
+.vscode/
+*.swp
+
+# ── Logs ─────────────────────────────────────────────────────────────────────
+*.log
+logs/
+
+# ── Temp / scratch ───────────────────────────────────────────────────────────
+branding-output.json
+dns-change.json
+dotted-bg.b64
+day_*.md
+2_week_plan.md
+rag_platform_research.md
+update-branding*.json
+loginpagestyle.css

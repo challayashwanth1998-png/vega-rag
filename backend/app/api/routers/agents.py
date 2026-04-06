@@ -75,6 +75,37 @@ def list_sources(bot_id: str):
     return response.get("Items", [])
 
 
+@router.delete("/{bot_id}/sources/{sk:path}")
+def delete_source(bot_id: str, sk: str):
+    """Deletes a source from the UI and Data Dictionary."""
+    table = _get_table()
+    # 1. Delete the UI source record
+    table.delete_item(Key={"PK": f"AGENT#{bot_id}", "SK": sk})
+    
+    # 2. If it's a table, also delete the TABLE# SQL context record
+    if sk.startswith("SOURCE#TABLE#"):
+        filename = sk.replace("SOURCE#TABLE#", "")
+        table.delete_item(Key={"PK": f"AGENT#{bot_id}", "SK": f"TABLE#{filename}"})
+        
+    return {"status": "deleted"}
+
+
+@router.get("/{bot_id}/tables")
+def list_tables(bot_id: str):
+    """Returns all CSV/Excel table metadata (TABLE# keys) for the access-control UI."""
+    table = _get_table()
+    response = table.query(
+        KeyConditionExpression="PK = :pk AND begins_with(SK, :prefix)",
+        ExpressionAttributeValues={
+            ":pk": f"AGENT#{bot_id}",
+            ":prefix": "TABLE#",
+        },
+    )
+    items = response.get("Items", [])
+    return sorted(items, key=lambda x: x.get("createdAt", ""))
+
+
+
 # ── Analytics ─────────────────────────────────────────────────────────────────
 
 @router.get("/{bot_id}/analytics")
@@ -95,7 +126,12 @@ def get_analytics(bot_id: str):
             formatted_date = datetime.strptime(day_str, "%Y-%m-%d").strftime("%b %d")
         except ValueError:
             formatted_date = day_str
-        chart_data.append({"name": formatted_date, "raw_date": day_str, "queries": int(item.get("query_count", 0))})
+        chart_data.append({
+            "name": formatted_date,
+            "raw_date": day_str,
+            "queries": int(item.get("query_count", 0)),
+            "tokens": int(item.get("token_count", 0)),
+        })
     return sorted(chart_data, key=lambda x: x["raw_date"])
 
 
@@ -127,6 +163,8 @@ def update_agent_config(bot_id: str, req: UpdateConfigReq):
         "brand_color": req.brand_color,
         "name": req.name,
         "welcome_message": req.welcome_message,
+        "chat_title": req.chat_title,
+        "chat_logo_url": req.chat_logo_url,
     })
     return {"status": "saved"}
 
@@ -142,6 +180,8 @@ def get_agent_config(bot_id: str):
         "brand_color": "#2563eb",
         "name": "Custom Agent",
         "welcome_message": "Hi! How can I assist you today?",
+        "chat_title": "",
+        "chat_logo_url": "",
     }
 
 

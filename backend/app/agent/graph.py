@@ -20,6 +20,7 @@ Routing:
 """
 import boto3
 from typing import TypedDict, Literal
+from pydantic import BaseModel, Field
 from langgraph.graph import StateGraph, END
 from langchain_aws import ChatBedrockConverse
 from langchain_core.messages import SystemMessage, HumanMessage
@@ -35,6 +36,7 @@ class AgentState(TypedDict):
     intent: str      # "casual" | "rag" | "sql"
     context: str     # populated by rag_node
     sql_result: str  # populated by sql_node
+    restricted_tables: list  # filenames the requesting user cannot access
 
 
 def _get_llm():
@@ -46,29 +48,30 @@ def _get_llm():
 
 # ── Node 1: Router ────────────────────────────────────────────────────────────
 
+class RouterDecision(BaseModel):
+    """Determination of which tool or system path to route the user towards."""
+    intent: Literal["casual", "rag", "sql"] = Field(
+        ...,
+        description=(
+            "Use 'sql' for ANY queries regarding counts, totals, tables, csvs, excels, or numeric aggregations. "
+            "Use 'rag' for general knowledge, text documents, or company policies. "
+            "Use 'casual' for standard chat, greetings, and generic banter."
+        )
+    )
+
 def router_node(state: AgentState) -> AgentState:
-    """LLM-based intent classification. Returns one of: casual | rag | sql"""
-    llm = _get_llm()
-    resp = llm.invoke([
-        SystemMessage(content="""You are an intent classifier. Classify the user query into EXACTLY ONE of three categories:
+    """LLM-based intent classification via Schema Tool Calling."""
+    llm = _get_llm().with_structured_output(RouterDecision)
+    try:
+        resp = llm.invoke([
+            SystemMessage(content="You are an expert intent classifier and query router. Decide the most appropriate execution path."),
+            HumanMessage(content=state["query"])
+        ])
+        intent = resp.intent
+    except Exception as e:
+        print(f"[router] Structured output fallback: {e}")
+        intent = "rag"  # Fallback to general RAG
 
-casual  → greetings, chit-chat, "how are you", "what can you do", very generic questions
-rag     → questions needing uploaded documents, PDFs, website content, policy docs, company knowledge
-sql     → ANY question involving: counts, totals, averages, sums, filtering data, "how many", "what is the total",
-          "show me", "list all", statistics, numbers from spreadsheets, CSV data, Excel files, records, rows
-
-IMPORTANT: When in doubt between rag and sql, pick sql if the question involves numbers or counting things.
-Examples of sql: "how many members", "what is the total revenue", "show me all records", "average age",
-                  "count of items", "how many rows", "top 5 by sales", "sum of", "which department has most"
-Examples of rag: "what does the policy say about", "explain the onboarding process", "summarize the PDF"
-Examples of casual: "hello", "what is 2+2", "tell me a joke", "who are you"
-
-Reply with ONLY: casual, rag, or sql"""),
-        HumanMessage(content=state["query"]),
-    ])
-    raw = resp.content.strip().lower() if isinstance(resp.content, str) else "rag"
-    # Extract just first word in case model added explanation
-    intent = raw.split()[0] if raw.split() else "rag"
     intent = intent if intent in ("casual", "rag", "sql") else "rag"
     print(f"[router] '{state['query'][:60]}' → {intent}")
     return {"intent": intent}
@@ -118,10 +121,15 @@ def rag_node(state: AgentState) -> AgentState:
 def sql_node(state: AgentState) -> AgentState:
     """
     Runs the Text-to-SQL pipeline: lists bot tables → generates SQL → executes via DuckDB.
+    Restricted tables are filtered out before the LLM ever sees the schema.
     Returns formatted result string for chat.py to stream.
     """
     try:
-        result = execute_sql_for_bot(state["bot_id"], state["query"])
+        result = execute_sql_for_bot(
+            state["bot_id"],
+            state["query"],
+            restricted_tables=state.get("restricted_tables") or [],
+        )
         print(f"[sql] result preview: {result[:100]}")
     except Exception as e:
         result = f"SQL error: {e}"

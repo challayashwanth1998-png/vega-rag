@@ -18,6 +18,8 @@ class UpdateConfigReq(BaseModel):
     brand_color: str = "#2563eb"
     name: str = "My Custom Agent"
     welcome_message: str = "Hi! How can I assist you today?"
+    chat_title: str = ""
+    chat_logo_url: str = ""
 
 
 class WorkflowReq(BaseModel):
@@ -44,3 +46,5 @@ class ChatRequest(BaseModel):
     query: str
     bot_id: str
     session_id: str = "default_session"
+    user_email: Optional[str] = None          # set by authenticated widget sessions
+    restricted_tables: Optional[list] = None  # override from caller; backend fetches from DB if not set

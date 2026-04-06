@@ -14,6 +14,7 @@ import boto3
 import io
 import pandas as pd
 from datetime import datetime
+from pydantic import BaseModel
 
 from app.core.config import settings
 
@@ -118,4 +119,30 @@ async def ingest_table(
             ExpressionAttributeNames={"#s": "status"},
             ExpressionAttributeValues={":status": "Failed", ":error": str(e)},
         )
+        raise HTTPException(status_code=500, detail=str(e))
+
+class SchemaUpdateReq(BaseModel):
+    schema_explanations: dict[str, str]
+
+@router.get("/{bot_id}/tables/{filename}")
+def get_table_details(bot_id: str, filename: str):
+    """Fetches full table metadata including schema_explanations."""
+    db_table = _get_table()
+    resp = db_table.get_item(Key={"PK": f"AGENT#{bot_id}", "SK": f"TABLE#{filename}"})
+    if "Item" not in resp:
+        raise HTTPException(status_code=404, detail="Table not found.")
+    return resp["Item"]
+
+@router.put("/{bot_id}/tables/{filename}/schema")
+def update_table_schema(bot_id: str, filename: str, req: SchemaUpdateReq):
+    """Updates the data dictionary context for a particular table."""
+    db_table = _get_table()
+    try:
+        db_table.update_item(
+            Key={"PK": f"AGENT#{bot_id}", "SK": f"TABLE#{filename}"},
+            UpdateExpression="SET schema_explanations = :s",
+            ExpressionAttributeValues={":s": req.schema_explanations}
+        )
+        return {"status": "success"}
+    except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

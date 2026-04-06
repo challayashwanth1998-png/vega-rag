@@ -56,6 +56,27 @@ export const api = {
     sources: (botId: string) =>
       get<SourceRecord[]>(`/api/agents/${botId}/sources`),
 
+    deleteSource: (botId: string, sk: string) =>
+      fetch(`${BASE_URL}/api/agents/${botId}/sources/${encodeURIComponent(sk)}`, { method: "DELETE" }).then(r => r.json()),
+
+    getUsers: (botId: string) =>
+      get<any[]>(`/api/agents/${botId}/users`),
+
+    addUser: (botId: string, email: string, pass: string) =>
+      post<{status:string}>(`/api/agents/${botId}/users`, { email, password: pass }),
+
+    deleteUser: (botId: string, email: string) =>
+      fetch(`${BASE_URL}/api/agents/${botId}/users/${encodeURIComponent(email)}`, { method: "DELETE" }).then(r => r.json()),
+
+    getUserRestrictions: (botId: string, email: string) =>
+      get<{ restricted_tables: string[] }>(`/api/agents/${botId}/users/${encodeURIComponent(email)}/restrictions`),
+
+    updateUserRestrictions: (botId: string, email: string, restricted_tables: string[]) =>
+      put<{ status: string }>(`/api/agents/${botId}/users/${encodeURIComponent(email)}/restrictions`, { restricted_tables }),
+
+    listTables: (botId: string) =>
+      get<TableRecord[]>(`/api/agents/${botId}/tables`),
+
     analytics: (botId: string) =>
       get<AnalyticsRecord[]>(`/api/agents/${botId}/analytics`),
 
@@ -103,6 +124,16 @@ export const api = {
     },
   },
 
+  tables: {
+    getDetails: (botId: string, filename: string) =>
+      get<TableDetailsRecord>(`/api/${botId}/tables/${encodeURIComponent(filename)}`),
+
+    updateSchema: (botId: string, filename: string, explanations: Record<string, string>) =>
+      put<{ status: string }>(`/api/${botId}/tables/${encodeURIComponent(filename)}/schema`, {
+        schema_explanations: explanations,
+      }),
+  },
+
   /** Returns a raw EventSource URL for the chat SSE stream */
   chatStreamUrl: (): string => `${BASE_URL}/api/chat`,
 };
@@ -126,7 +157,25 @@ export interface SourceRecord {
   createdAt?: string;
 }
 
+export interface TableDetailsRecord {
+  filename: string;
+  table_name: string;
+  columns: string[];
+  row_count: number;
+  schema_explanations?: Record<string, string>;
+}
+
+export interface TableRecord {
+  SK: string;
+  filename: string;
+  table_name: string;
+  columns: string[];
+  row_count: number;
+  createdAt?: string;
+}
+
 export interface AnalyticsRecord {
+
   name: string;
   raw_date: string;
   queries: number;

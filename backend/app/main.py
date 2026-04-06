@@ -13,7 +13,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
-from app.api.routers import crawl, chat, agents, tables
+from app.api.routers import crawl, chat, agents, tables, users
 
 app = FastAPI(
     title="VegaRAG API",
@@ -33,6 +33,7 @@ app.include_router(crawl.router, prefix="/api", tags=["ingestion"])
 app.include_router(chat.router, prefix="/api", tags=["chat"])
 app.include_router(agents.router, prefix="/api/agents", tags=["agents"])
 app.include_router(tables.router, prefix="/api", tags=["tables"])
+app.include_router(users.router, prefix="/api/agents", tags=["end-users"])
 
 
 @app.get("/", tags=["health"])
