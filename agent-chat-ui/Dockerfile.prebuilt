@@ -1,0 +1,29 @@
+# ==========================================
+# agent-chat-ui Dockerfile — Prebuilt variant
+# Build Next.js locally, copy .next into image.
+# This avoids OOM issues inside Docker Desktop.
+# ==========================================
+FROM --platform=linux/amd64 node:20-slim AS runner
+WORKDIR /app
+
+RUN corepack enable && corepack prepare pnpm@latest --activate
+
+ENV NODE_ENV=production
+ENV NEXT_TELEMETRY_DISABLED=1
+
+# Copy everything needed to run (prebuilt .next, node_modules, config)
+COPY package.json pnpm-lock.yaml ./
+RUN pnpm install --frozen-lockfile
+
+COPY next.config.mjs ./
+COPY .next ./.next
+
+EXPOSE 3001
+ENV PORT=3001
+
+ARG NEXT_PUBLIC_API_URL="/chat/api/langgraph"
+ARG NEXT_PUBLIC_APP_NAME="VegaRAG"
+ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+ENV NEXT_PUBLIC_APP_NAME=$NEXT_PUBLIC_APP_NAME
+
+CMD ["node_modules/.bin/next", "start", "--port", "3001"]
