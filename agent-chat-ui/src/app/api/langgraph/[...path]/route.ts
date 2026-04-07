@@ -71,14 +71,17 @@ function buildExchangeMessages(act: {
   const toolCallId = `tc-${sk}`;
   const intent = act.intent ?? "rag";
   const toolArgs = { intent };
+  // Guard: if ai_response is undefined/empty, content: undefined renders as
+  // the literal string "undefined" in the LangGraph SDK chat UI.
+  const aiContent = act.ai_response || "";
   return [
-    { id: `human-${sk}`, type: "human", content: act.user_msg },
+    { id: `human-${sk}`, type: "human", content: act.user_msg || "" },
     {
       id: `ai-tool-${sk}`, type: "ai", content: "",
       tool_calls: [{ id: toolCallId, name: "VegaRAG_Executor", type: "tool_call", args: toolArgs }],
     },
     { id: `tool-${sk}`, type: "tool", name: "VegaRAG_Executor", tool_call_id: toolCallId, content: JSON.stringify(toolArgs) },
-    { id: `ai-${sk}`, type: "ai", content: act.ai_response },
+    { id: `ai-${sk}`, type: "ai", content: aiContent },
   ];
 }
 
