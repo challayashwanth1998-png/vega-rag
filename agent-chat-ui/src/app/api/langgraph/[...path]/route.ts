@@ -344,11 +344,15 @@ export async function POST(
             try {
               const parsed = JSON.parse(dataStr);
               if (parsed.tools) {
+                // Capture intent metadata — do NOT emit yet.
+                // Emitting here causes tool result messages to appear as
+                // text content before the AI response starts, producing
+                // the "undefined" prefix users see. Wait for real text.
                 toolArgs = { intent: parsed.tools.intent ?? "rag" };
-                emit("");
                 continue;
               }
               const token = parsed.text ?? "";
+              if (!token) continue;
               accumulatedText += token;
               emit(accumulatedText);
             } catch { /* skip malformed */ }

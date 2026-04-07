@@ -73,8 +73,12 @@ class RouterDecision(BaseModel):
         ...,
         description=(
             "Use 'sql' for ANY queries about counts, totals, tables, CSVs, Excel, or numeric aggregations. "
-            "Use 'rag' for general knowledge, text documents, PDFs, or company policies. "
-            "Use 'casual' for greetings, small talk, and generic banter."
+            "Use 'rag' for ALL other questions — about people, documents, policies, facts, resumes, "
+            "locations, jobs, companies, or anything that might be found in an uploaded document. "
+            "When in doubt, ALWAYS choose 'rag'. "
+            "Use 'casual' ONLY for standalone greetings with no question: 'hi', 'hello', 'hey', "
+            "'how are you', 'good morning'. If the message contains ANY question word (who, what, "
+            "where, when, why, how, which, is, are, was, did, does, can) — use 'rag', not 'casual'."
         )
     )
 
