@@ -64,13 +64,14 @@ def _mark_failed(table, bot_id: str, source_sk: str, error: str):
 
 @router.post("/crawl")
 def crawl_website(req: CrawlRequest):
-    """Scrapes a URL, chunks, embeds via Bedrock Titan, upserts to Pinecone."""
+    """Scrapes a URL, chunks, embeds via Bedrock Titan + Contextual Retrieval, upserts to Pinecone."""
     table = _get_table()
     source_sk = f"SOURCE#{req.url}"
     _mark_syncing(table, req.bot_id, source_sk, req.url)
     try:
         documents = scrape_url_to_chunks(req.url)
-        chunks_inserted = embed_and_upsert_documents(documents, req.bot_id)
+        full_text = "\n\n".join(d.page_content for d in documents)
+        chunks_inserted = embed_and_upsert_documents(documents, req.bot_id, full_text=full_text)
         _mark_synced(table, req.bot_id, source_sk, chunks_inserted)
         return {"status": "success", "chunks_memorized": chunks_inserted}
     except Exception as e:
@@ -82,7 +83,7 @@ def crawl_website(req: CrawlRequest):
 
 @router.post("/text")
 def ingest_text(req: TextRequest):
-    """Chunks raw pasted text, embeds via Bedrock Titan, upserts to Pinecone."""
+    """Chunks raw pasted text, embeds via Bedrock Titan + Contextual Retrieval, upserts to Pinecone."""
     table = _get_table()
     source_sk = f"SOURCE#TEXT#{req.title}"
     _mark_syncing(table, req.bot_id, source_sk, f"Raw Text: {req.title[:15]}...")
@@ -93,7 +94,7 @@ def ingest_text(req: TextRequest):
             Document(page_content=c, metadata={"source_url": req.title, "type": "raw_text"})
             for c in chunks
         ]
-        chunks_inserted = embed_and_upsert_documents(documents, req.bot_id)
+        chunks_inserted = embed_and_upsert_documents(documents, req.bot_id, full_text=req.text_content)
         _mark_synced(table, req.bot_id, source_sk, chunks_inserted)
         return {"status": "success", "chunks_memorized": chunks_inserted}
     except Exception as e:
@@ -129,11 +130,13 @@ async def ingest_pdf(
         # Step 1: Archive to S3 for audit / re-ingestion without re-upload
         s3_uri = store_pdf_in_s3(file_bytes, bot_id, file.filename)
 
-        # Step 2: Extract → chunk
-        documents = extract_pdf_to_chunks(file_bytes, file.filename)
+        # Step 2: Extract → chunk (returns documents + full_text for contextual retrieval)
+        documents, full_text = extract_pdf_to_chunks(file_bytes, file.filename)
 
-        # Step 3: Embed via Bedrock Titan → upsert to Pinecone namespace
-        chunks_inserted = embed_and_upsert_documents(documents, bot_id)
+        # Step 3: Contextual Retrieval embed → Pinecone upsert
+        # Each chunk gets an LLM-generated context prepended before embedding
+        # so vectors carry full document awareness (Anthropic, 2024)
+        chunks_inserted = embed_and_upsert_documents(documents, bot_id, full_text=full_text)
 
         # Step 4: Mark synced + store S3 reference
         _mark_synced(table, bot_id, source_sk, chunks_inserted, s3_uri)

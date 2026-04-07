@@ -35,7 +35,17 @@ def store_pdf_in_s3(file_bytes: bytes, bot_id: str, filename: str) -> str:
     return f"s3://{settings.S3_DOCUMENT_BUCKET}/{key}"
 
 
-def extract_pdf_to_chunks(file_bytes: bytes, filename: str, chunk_size: int = 1000) -> list[Document]:
+def extract_pdf_to_chunks(
+    file_bytes: bytes, filename: str, chunk_size: int = 1000
+) -> tuple[list[Document], str]:
+    """
+    Parses a PDF → extracts text → splits into overlapping chunks.
+
+    Returns:
+        (documents, full_text)
+        - documents : LangChain Document list for embedding
+        - full_text : complete raw text for Contextual Retrieval enrichment
+    """
     """
     Parses a PDF from raw bytes → extracts text → splits into overlapping chunks.
     Uses pypdf (pure-python, no binary deps) for extraction.
@@ -70,10 +80,11 @@ def extract_pdf_to_chunks(file_bytes: bytes, filename: str, chunk_size: int = 10
     )
     chunks = splitter.split_text(full_text)
 
-    return [
+    documents = [
         Document(
             page_content=chunk,
             metadata={"source_url": filename, "type": "pdf"},
         )
         for chunk in chunks
     ]
+    return documents, full_text
