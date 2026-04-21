@@ -2,6 +2,13 @@
 
 **Enterprise-grade multi-tenant AI Agent SaaS platform — powered by Amazon Bedrock, LangGraph, and Next.js.**
 
+
+
+https://github.com/user-attachments/assets/932890c4-fe0c-4bc8-9183-94c8233e1f42
+
+
+
+
 Build, deploy, and manage white-labeled AI chat agents that query your private data. Each agent gets its own branding, users, data sources, and access controls — all managed from a single admin dashboard.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
