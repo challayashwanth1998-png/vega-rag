@@ -51,6 +51,10 @@ export default function HomePage() {
                 className="w-full sm:w-auto px-10 py-5 bg-white border-2 border-slate-200 text-slate-700 text-lg font-black rounded-2xl hover:border-slate-300 hover:-translate-y-1 transition-all flex items-center justify-center gap-2">
                 <Github className="w-5 h-5" /> Deploy Open Source
               </Link>
+              <Link href="https://docs.google.com/forms/d/e/1FAIpQLSeGY3nVQKB-FCbmfTPNGo2b9rWsz9mp8MK9KoyBGlIo_7iVfQ/viewform" target="_blank"
+                className="w-full sm:w-auto px-10 py-5 bg-emerald-50 border-2 border-emerald-200 text-emerald-700 text-lg font-black rounded-2xl hover:border-emerald-400 hover:-translate-y-1 transition-all flex items-center justify-center gap-2">
+                📝 Share Feedback
+              </Link>
             </div>
 
             {/* Trust strip */}
@@ -60,6 +64,19 @@ export default function HomePage() {
                   <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" /> {t}
                 </div>
               ))}
+            </div>
+
+            {/* Feedback strip */}
+            <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-3">
+              <span className="text-slate-400 text-sm font-medium">Using VegaRAG? Tell us what you&apos;re building →</span>
+              <Link href="https://docs.google.com/forms/d/e/1FAIpQLSeGY3nVQKB-FCbmfTPNGo2b9rWsz9mp8MK9KoyBGlIo_7iVfQ/viewform" target="_blank"
+                className="inline-flex items-center gap-1.5 px-4 py-2 bg-emerald-600 text-white text-xs font-black rounded-xl hover:bg-emerald-700 transition">
+                📝 2-min Feedback Form
+              </Link>
+              <Link href="https://github.com/challayashwanth1998-png/vega-rag/discussions" target="_blank"
+                className="inline-flex items-center gap-1.5 px-4 py-2 bg-white border border-slate-200 text-slate-600 text-xs font-black rounded-xl hover:border-slate-300 transition">
+                💬 GitHub Discussions
+              </Link>
             </div>
           </motion.div>
         </section>

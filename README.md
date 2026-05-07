@@ -29,6 +29,18 @@ https://github.com/user-attachments/assets/7e07fd03-bc5f-4d4e-9de8-21c8845160f1
 
 ---
 
+## 💬 Community & Feedback
+
+| | |
+|---|---|
+| 📝 **Feedback Form** | [Tell us what you're building — 2 min](https://docs.google.com/forms/d/e/1FAIpQLSeGY3nVQKB-FCbmfTPNGo2b9rWsz9mp8MK9KoyBGlIo_7iVfQ/viewform) |
+| 💡 **GitHub Discussions** | [Ask questions, share ideas, show what you built](https://github.com/challayashwanth1998-png/vega-rag/discussions) |
+| 🐛 **Bug Reports** | [Open a GitHub Issue](https://github.com/challayashwanth1998-png/vega-rag/issues) |
+
+> ⭐ If VegaRAG is useful to you, consider starring the repo!
+
+---
+
 ## 📖 What is VegaRAG?
 
 VegaRAG is a **production-ready, multi-tenant AI Agent SaaS platform** that lets businesses ("admins") create AI chatbots ("bots") their end-users can chat with. Each bot can:
