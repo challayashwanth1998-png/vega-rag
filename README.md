@@ -348,6 +348,18 @@ vega-rag/
 
 ---
 
+## 💬 Community & Feedback
+
+| | |
+|---|---|
+| 📝 **Feedback Form** | [Share what you're building — 2 min form](https://docs.google.com/forms/d/e/1FAIpQLSeGY3nVQKB-FCbmfTPNGo2b9rWsz9mp8MK9KoyBGlIo_7iVfQ/viewform) |
+| 💡 **GitHub Discussions** | [Ask questions, share ideas, show what you built](https://github.com/challayashwanth1998-png/vega-rag/discussions) |
+| 🐛 **Bug Reports** | [Open a GitHub Issue](https://github.com/challayashwanth1998-png/vega-rag/issues) |
+
+> ⭐ If VegaRAG is useful to you, consider starring the repo — it helps others discover it!
+
+---
+
 ## 📄 License
 
 MIT License — see [LICENSE](LICENSE) for details.
