@@ -23,7 +23,7 @@
 
 <div align="center">
 
-https://github.com/challayashwanth1998-png/vega-rag/assets/demo.mp4
+https://github.com/user-attachments/assets/7e07fd03-bc5f-4d4e-9de8-21c8845160f1
 
 </div>
 
