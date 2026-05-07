@@ -20,11 +20,7 @@
 
 ## 🎬 Demo
 
-> **Watch VegaRAG in action** — create a bot, upload documents, restrict users, and chat in real time with full SSE streaming.
-
 https://github.com/challayashwanth1998-png/vega-rag/releases/download/v2.0.0/vegarag-demo.mp4
-
-[![Download Demo](https://img.shields.io/badge/⬇_Download_Demo-MP4_7.3MB-blue?style=for-the-badge)](https://github.com/challayashwanth1998-png/vega-rag/releases/download/v2.0.0/vegarag-demo.mp4)
 
 ---
 
