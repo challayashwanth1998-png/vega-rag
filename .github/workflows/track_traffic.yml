@@ -1,0 +1,65 @@
+name: Track GitHub Traffic
+
+on:
+  schedule:
+    - cron: '0 6 * * *'   # Every day at 6am UTC
+  workflow_dispatch:        # Also allow manual trigger
+
+jobs:
+  track-traffic:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Fetch & append traffic data
+        env:
+          GH_TOKEN: ${{ secrets.TRAFFIC_TOKEN }}
+          REPO: ${{ github.repository }}
+        run: |
+          DATE=$(date +%Y-%m-%d)
+
+          # Fetch clones
+          CLONES=$(curl -s -H "Authorization: Bearer $GH_TOKEN" \
+            "https://api.github.com/repos/$REPO/traffic/clones" | \
+            python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('count',0),d.get('uniques',0))")
+          CLONE_TOTAL=$(echo $CLONES | cut -d' ' -f1)
+          CLONE_UNIQUE=$(echo $CLONES | cut -d' ' -f2)
+
+          # Fetch views
+          VIEWS=$(curl -s -H "Authorization: Bearer $GH_TOKEN" \
+            "https://api.github.com/repos/$REPO/traffic/views" | \
+            python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('count',0),d.get('uniques',0))")
+          VIEW_TOTAL=$(echo $VIEWS | cut -d' ' -f1)
+          VIEW_UNIQUE=$(echo $VIEWS | cut -d' ' -f2)
+
+          # Fetch stars and forks
+          REPO_DATA=$(curl -s -H "Authorization: Bearer $GH_TOKEN" \
+            "https://api.github.com/repos/$REPO")
+          STARS=$(echo $REPO_DATA | python3 -c "import sys,json; print(json.load(sys.stdin).get('stargazers_count',0))")
+          FORKS=$(echo $REPO_DATA | python3 -c "import sys,json; print(json.load(sys.stdin).get('forks_count',0))")
+
+          # Create CSV header if file doesn't exist
+          mkdir -p .github/traffic
+          if [ ! -f .github/traffic/history.csv ]; then
+            echo "date,clone_total_14d,clone_unique_14d,view_total_14d,view_unique_14d,stars,forks" > .github/traffic/history.csv
+          fi
+
+          # Append today's snapshot (only add if date not already present)
+          if ! grep -q "^$DATE," .github/traffic/history.csv 2>/dev/null; then
+            echo "$DATE,$CLONE_TOTAL,$CLONE_UNIQUE,$VIEW_TOTAL,$VIEW_UNIQUE,$STARS,$FORKS" >> .github/traffic/history.csv
+            echo "Logged: $DATE — clones=$CLONE_TOTAL uniq=$CLONE_UNIQUE views=$VIEW_TOTAL stars=$STARS"
+          else
+            echo "Already logged $DATE, skipping"
+          fi
+
+      - name: Commit traffic snapshot
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add .github/traffic/history.csv
+          git diff --staged --quiet || git commit -m "chore: daily traffic snapshot $(date +%Y-%m-%d)"
+          git push
