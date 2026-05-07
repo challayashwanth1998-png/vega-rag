@@ -381,7 +381,26 @@ vega-rag/
 
 ---
 
+## ☕ Support This Project
+
+VegaRAG is **completely free and open-source**. Running the demo infrastructure on AWS Fargate costs ~$100/month (ECS, ALB, DynamoDB, Bedrock, Pinecone).
+
+If VegaRAG saved you time or helped you ship something, consider supporting the project to keep the lights on:
+
+<div align="center">
+
+[![Open Collective](https://img.shields.io/badge/Donate-Open_Collective-blue?style=for-the-badge&logo=opencollective)](https://opencollective.com/vegarag)
+
+**100% of donations go directly to AWS infrastructure costs.**  
+Managed transparently by [Open Source Collective](https://opencollective.com/opensource) (501c6 nonprofit).  
+All expenses are public — [see exactly what the money pays for](https://opencollective.com/vegarag/expenses).
+
+</div>
+
+---
+
 ## 📄 License
+
 
 MIT License — see [LICENSE](LICENSE) for details.
 
