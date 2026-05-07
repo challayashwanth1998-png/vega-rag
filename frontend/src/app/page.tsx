@@ -79,6 +79,38 @@ export default function HomePage() {
               </Link>
             </div>
           </motion.div>
+
+          {/* ── Demo Video ── */}
+          <motion.div
+            initial={{ opacity: 0, y: 40 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.7, delay: 0.3 }}
+            className="mt-4 mb-8 max-w-5xl mx-auto px-4"
+          >
+            <div className="relative rounded-2xl overflow-hidden shadow-2xl shadow-blue-500/10 border border-slate-200 bg-slate-900">
+              {/* Browser chrome bar */}
+              <div className="flex items-center gap-2 px-4 py-3 bg-slate-800 border-b border-slate-700">
+                <span className="w-3 h-3 rounded-full bg-red-500" />
+                <span className="w-3 h-3 rounded-full bg-yellow-400" />
+                <span className="w-3 h-3 rounded-full bg-emerald-500" />
+                <div className="flex-1 mx-4 bg-slate-700 rounded-md px-3 py-1 text-[11px] text-slate-400 font-mono">
+                  vegarag.com/chat
+                </div>
+              </div>
+              {/* Video */}
+              <video
+                src="/demo.mp4"
+                autoPlay
+                muted
+                loop
+                playsInline
+                className="w-full max-h-[520px] object-cover"
+              />
+              {/* Gradient overlay at bottom */}
+              <div className="absolute bottom-0 left-0 right-0 h-16 bg-gradient-to-t from-slate-900/60 to-transparent pointer-events-none" />
+            </div>
+            <p className="text-center text-xs text-slate-400 font-medium mt-3">
+              Live demo — RAG chat with document upload, SQL querying, and streaming responses
+            </p>
+          </motion.div>
         </section>
 
         {/* ══════════════════════════════════════════════════════════════
