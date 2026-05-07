@@ -53,6 +53,15 @@ VegaRAG is a **production-ready, multi-tenant AI Agent SaaS platform** that lets
 
 ---
 
+## 🤖 AI Agent Guides
+
+> **Deploying with an AI coding agent? Give it these two files — it can navigate, modify, and deploy the entire platform from scratch.**
+
+| File | Purpose |
+|------|---------|
+| [`AGENTS.md`](AGENTS.md) | **Codebase intelligence** — file map, data flow, API endpoints, DynamoDB schema, LangGraph state, auth system, proxy architecture, and known gotchas |
+| [`DEPLOY.md`](DEPLOY.md) | **Full deployment guide** — AWS provisioning (DynamoDB, S3, ECR, ECS, ALB, IAM), Docker build commands, env vars, local dev setup, post-deploy verification, and troubleshooting |
+
 ## 🏗️ Architecture Overview
 
 ```
