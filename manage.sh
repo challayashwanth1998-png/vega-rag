@@ -10,10 +10,10 @@ export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
 
 # ── Config ────────────────────────────────────────────────────────────────────
 AWS_REGION="us-east-1"
-ACCOUNT_ID="519008639833"
+ACCOUNT_ID="${AWS_ACCOUNT_ID:-$(aws sts get-caller-identity --query Account --output text 2>/dev/null)}"
 CLUSTER="vegarag-cluster-v2"
 ECR_REGISTRY="${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
-ALB_DNS="vegarag-alb-1907307840.us-east-1.elb.amazonaws.com"
+ALB_DNS="${ALB_DNS:-your-alb-dns.us-east-1.elb.amazonaws.com}"
 
 SERVICES=(
   "vegarag-frontend-service"

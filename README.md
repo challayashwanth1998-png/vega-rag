@@ -18,6 +18,16 @@
 
 ---
 
+## 🎬 Demo
+
+> **Watch VegaRAG in action** — create a bot, upload documents, restrict users, and chat in real time with full SSE streaming.
+
+https://github.com/challayashwanth1998-png/vega-rag/releases/download/v2.0.0/vegarag-demo.mp4
+
+[![Download Demo](https://img.shields.io/badge/⬇_Download_Demo-MP4_7.3MB-blue?style=for-the-badge)](https://github.com/challayashwanth1998-png/vega-rag/releases/download/v2.0.0/vegarag-demo.mp4)
+
+---
+
 ## 📖 What is VegaRAG?
 
 VegaRAG is a **production-ready, multi-tenant AI Agent SaaS platform** that lets businesses ("admins") create AI chatbots ("bots") their end-users can chat with. Each bot can:
@@ -212,9 +222,9 @@ POST   /api/agents/{bot_id}/login                        Authenticate user
 
 ### Infrastructure
 ```
-Account:  519008639833 (us-east-1)
-Cluster:  vegarag-cluster-v2
-ALB:      vegarag-alb-*.us-east-1.elb.amazonaws.com
+Region:   us-east-1
+Cluster:  vegarag-cluster-v2         (or your own cluster name)
+ALB:      your-alb-dns.us-east-1.elb.amazonaws.com
 DynamoDB: PlatformDB
 ECR:      vegarag-backend, vegarag-frontend, vegarag-chat-ui
 
@@ -223,6 +233,8 @@ ALB Routing:
   Priority 10: /api/*   → Backend (port 8000)
   Default:     /*       → Frontend (port 3000)
 ```
+
+> 💡 Replace `<YOUR_AWS_ACCOUNT_ID>` and `<YOUR_ALB_DNS>` with your own values when running the deploy scripts.
 
 ### Deploy Commands
 

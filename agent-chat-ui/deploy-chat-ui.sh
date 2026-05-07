@@ -22,7 +22,7 @@ export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
 
 # ── Config ────────────────────────────────────────────────────────────────────
 AWS_REGION="us-east-1"
-ACCOUNT_ID="519008639833"
+ACCOUNT_ID="${AWS_ACCOUNT_ID:-$(aws sts get-caller-identity --query Account --output text 2>/dev/null)}"
 CLUSTER="vegarag-cluster-v2"
 ECR_REPO="vegarag-chat-ui"
 IMAGE_URI="${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${ECR_REPO}:latest"
@@ -34,11 +34,11 @@ CONTAINER_PORT=3001
 SUBNETS="subnet-06f909831a5e8473a,subnet-0c4755bad35e553f3,subnet-005e55e815c989d12,subnet-09255c6da377db969,subnet-08ce89cd77b9a46ff,subnet-0ac1fd99a66132bfe"
 SECURITY_GROUP="sg-09b19e83f734d6be9"
 EXECUTION_ROLE="arn:aws:iam::${ACCOUNT_ID}:role/ecsTaskExecutionRole"
-ALB_ARN="arn:aws:elasticloadbalancing:${AWS_REGION}:${ACCOUNT_ID}:loadbalancer/app/vegarag-alb/2e6b6c4664053639"
-LISTENER_ARN="arn:aws:elasticloadbalancing:${AWS_REGION}:${ACCOUNT_ID}:listener/app/vegarag-alb/2e6b6c4664053639/9c1b382667ff367a"
+ALB_ARN="${ALB_ARN:-$(aws elbv2 describe-load-balancers --names vegarag-alb --query 'LoadBalancers[0].LoadBalancerArn' --output text 2>/dev/null)}"
+LISTENER_ARN="${LISTENER_ARN:-$(aws elbv2 describe-listeners --load-balancer-arn "${ALB_ARN}" --query 'Listeners[0].ListenerArn' --output text 2>/dev/null)}"
 
 # The backend URL reachable from inside the VPC (via ALB) — used by the SSE proxy at runtime
-ALB_DNS="vegarag-alb-1907307840.us-east-1.elb.amazonaws.com"
+ALB_DNS="${ALB_DNS:-your-alb-dns.us-east-1.elb.amazonaws.com}"
 BACKEND_URL="http://${ALB_DNS}"   # /api/* is routed to backend by existing ALB rule
 
 echo "════════════════════════════════════════"
