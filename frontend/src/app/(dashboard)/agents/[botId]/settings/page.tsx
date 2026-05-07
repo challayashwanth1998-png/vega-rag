@@ -39,6 +39,7 @@ export default function SettingsPage({ params }: { params: any }) {
            system_prompt: config?.system_prompt || "You are a helpful AI.",
            brand_color: color,
            name: name || "Custom Agent",
+           welcome_message: config?.welcome_message || "Hi! How can I assist you today?",
            chat_title: chatTitle,
            chat_logo_url: chatLogoUrl,
         })

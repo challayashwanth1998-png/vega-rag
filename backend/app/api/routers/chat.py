@@ -19,8 +19,12 @@ import datetime
 from app.core.config import settings
 from app.schemas.models import ChatRequest
 from app.agent.graph import agent_executor
+import structlog
+
+logger = structlog.get_logger("vega.api.chat")
 from langchain_aws import ChatBedrockConverse
 from langchain_core.messages import SystemMessage, HumanMessage
+from app.services.semantic_cache import get_semantic_cache, set_semantic_cache
 
 router = APIRouter()
 
@@ -49,6 +53,23 @@ def _extract_text(chunk) -> str:
 
 @router.post("/chat")
 async def chat_stream(req: ChatRequest):
+    log = logger.bind(tenant_id=req.bot_id, session_id=req.session_id, user_email=req.user_email)
+    log.info("chat_request_started")
+    
+    # 0. Enforce Rate Limit (Token Bucket algorithm)
+    from app.core.rate_limit import check_rate_limit
+    check_rate_limit(req.bot_id, tier="free")
+    
+    # 0.5 Input Guardrails (Prompt Injection & PII Scrubbing)
+    from app.core.guardrails import scrub_pii, check_prompt_injection
+    try:
+        check_prompt_injection(req.query)
+        # Redact PII so the LLM never sees SSNs, Emails, or Credit Cards
+        req.query = scrub_pii(req.query)
+    except Exception as e:
+        log.warning("security_guardrail_blocked", query=req.query)
+        raise e
+        
     table = _get_table()
     today = datetime.datetime.utcnow().strftime("%Y-%m-%d")
     current_month = datetime.datetime.utcnow().strftime("%Y-%m")
@@ -69,7 +90,7 @@ async def chat_stream(req: ChatRequest):
                 yield "data: [DONE]\n\n"
             return StreamingResponse(error_stream(), media_type="text/event-stream")
     except Exception as e:
-        print(f"[chat] limit check skip: {e}")
+        log.error("limit_check_failed", error=str(e))
 
     # 2. Track usage
     try:
@@ -79,7 +100,7 @@ async def chat_stream(req: ChatRequest):
             ExpressionAttributeValues={":inc": 1},
         )
     except Exception as e:
-        print(f"[chat] usage skip: {e}")
+        log.error("usage_tracking_failed", error=str(e))
 
     # 3. Resolve per-user data source restrictions
     restricted_tables: list[str] = req.restricted_tables or []
@@ -92,9 +113,31 @@ async def chat_stream(req: ChatRequest):
             if "Item" in user_resp:
                 restricted_tables = user_resp["Item"].get("restricted_tables", [])
                 if restricted_tables:
-                    print(f"[chat] user {req.user_email} restricted from: {restricted_tables}")
+                    log.info("user_restrictions_loaded", restricted_tables=restricted_tables)
         except Exception as e:
-            print(f"[chat] restriction lookup skip: {e}")
+            log.error("restriction_lookup_failed", error=str(e))
+
+    # 3.5 Semantic Cache Check
+    cached_response = get_semantic_cache(req.bot_id, req.query)
+    if cached_response:
+        log.info("semantic_cache_hit")
+        async def cached_event_generator():
+            yield f"data: {json.dumps({'tools': {'intent': 'cache', 'cache_hit': True}})}\n\n"
+            yield f"data: {json.dumps({'text': cached_response})}\n\n"
+            yield "data: [DONE]\n\n"
+            try:
+                table.put_item(Item={
+                    "PK": f"ACTIVITY#{req.bot_id}",
+                    "SK": f"ENTRY#{req.session_id}#{datetime.datetime.utcnow().isoformat()}",
+                    "session_id": req.session_id,
+                    "user_msg": req.query,
+                    "ai_response": cached_response,
+                    "intent": "cache",
+                    "timestamp": datetime.datetime.utcnow().isoformat(),
+                })
+            except Exception as e:
+                log.error("activity_log_write_failed", error=str(e))
+        return StreamingResponse(cached_event_generator(), media_type="text/event-stream")
 
     # 4. Run LangGraph — router + retrieval only (no generation inside graph)
     try:
@@ -107,13 +150,13 @@ async def chat_stream(req: ChatRequest):
             "restricted_tables": restricted_tables,
         })
     except Exception as e:
-        print(f"[chat] graph error: {e}")
+        log.error("langgraph_execution_failed", error=str(e))
         final_state = {"intent": "rag", "context": "", "sql_result": ""}
 
     intent = final_state.get("intent", "rag")
     context = final_state.get("context", "")
     sql_result = final_state.get("sql_result", "")
-    print(f"[chat] intent={intent}, context_len={len(context)}, sql_result_len={len(sql_result)}")
+    log.info("langgraph_execution_success", intent=intent, context_len=len(context), sql_result_len=len(sql_result))
 
     # 4. Fetch agent system prompt
     system_prompt = "You are a helpful AI assistant."
@@ -125,7 +168,7 @@ async def chat_stream(req: ChatRequest):
             user_prompt = cfg["Item"].get("system_prompt", system_prompt)
             system_prompt = f"Your name is {agent_name}. {user_prompt}"
     except Exception as e:
-        print(f"[chat] config skip: {e}")
+        log.error("config_lookup_failed", error=str(e))
         system_prompt = f"Your name is {agent_name}. {system_prompt}"
 
     # 5. Build messages based on intent
@@ -195,6 +238,7 @@ No relevant documents were found in the knowledge base. Let them know they shoul
         
         full_response = ""
         total_tokens = 0
+        has_error = False
         try:
             for chunk in llm.stream(messages):
                 text = _extract_text(chunk)
@@ -208,11 +252,28 @@ No relevant documents were found in the knowledge base. Let them know they shoul
                         usage.get("input_tokens", 0) + usage.get("output_tokens", 0)
                     )
         except Exception as e:
+            has_error = True
             err_msg = f"[Stream error: {e}]"
             yield f"data: {json.dumps({'text': err_msg})}\n\n"
             full_response += err_msg
 
         yield "data: [DONE]\n\n"
+
+        # 7. Output Guardrails (Toxicity & Hallucination Check)
+        from app.core.guardrails import check_toxicity, verify_output_groundedness
+        is_toxic = check_toxicity(full_response)
+        is_grounded = True
+        if intent == "rag" and context:
+            is_grounded = verify_output_groundedness(context, full_response)
+            
+        if is_toxic or not is_grounded:
+            log.warning("output_guardrail_flagged", is_toxic=is_toxic, is_grounded=is_grounded)
+            warning_msg = "⚠ WARNING: This response may contain unverified information or policy violations."
+            yield f"data: {json.dumps({'warning': warning_msg})}\\n\\n"
+
+        # Write to Semantic Cache if successful and SAFE
+        if full_response and not has_error and not is_toxic and is_grounded:
+            set_semantic_cache(req.bot_id, req.query, full_response)
 
         # Write real token count to DynamoDB STATS
         if total_tokens > 0:
@@ -223,7 +284,7 @@ No relevant documents were found in the knowledge base. Let them know they shoul
                     ExpressionAttributeValues={":t": total_tokens},
                 )
             except Exception as e:
-                print(f"[chat] token_count write skip: {e}")
+                log.error("token_count_write_failed", error=str(e))
 
         # 7. Log conversation to DynamoDB
         try:
@@ -235,9 +296,12 @@ No relevant documents were found in the knowledge base. Let them know they shoul
                 "ai_response": full_response,
                 "intent": intent,
                 "timestamp": datetime.datetime.utcnow().isoformat(),
+                "flagged_toxic": is_toxic,
+                "flagged_hallucination": not is_grounded,
             })
+            log.info("chat_request_completed", total_tokens=total_tokens)
         except Exception as e:
-            print(f"[chat] activity log skip: {e}")
+            log.error("activity_log_write_failed", error=str(e))
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 
@@ -253,5 +317,5 @@ async def get_session_activity(session_id: str):
         items.sort(key=lambda x: x.get("timestamp", ""))
         return items
     except Exception as e:
-        print(f"Failed to scan activities: {e}")
+        logger.error("scan_activities_failed", session_id=session_id, error=str(e))
         return []

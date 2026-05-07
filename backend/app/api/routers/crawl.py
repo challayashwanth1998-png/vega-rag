@@ -6,7 +6,7 @@ Data flow for each source type:
   Text: raw paste → chunk → Bedrock Titan embed → Pinecone upsert → DynamoDB status
   PDF:  upload → S3 archive → pypdf extract → chunk → Bedrock Titan embed → Pinecone upsert → DynamoDB status
 """
-from fastapi import APIRouter, HTTPException, UploadFile, File, Form
+from fastapi import APIRouter, HTTPException, UploadFile, File, Form, BackgroundTasks
 import boto3
 from datetime import datetime
 
@@ -105,17 +105,35 @@ def ingest_text(req: TextRequest):
 # ── PDF Upload ────────────────────────────────────────────────────────────────
 
 @router.post("/pdf")
+def _process_pdf_async(file_bytes: bytes, filename: str, bot_id: str, source_sk: str, table):
+    """Background worker task for heavy PDF extraction and embedding."""
+    try:
+        # Step 1: Archive to S3 for audit / re-ingestion without re-upload
+        s3_uri = store_pdf_in_s3(file_bytes, bot_id, filename)
+
+        # Step 2: Extract → chunk
+        documents, full_text = extract_pdf_to_chunks(file_bytes, filename)
+
+        # Step 3: Contextual Retrieval embed → Pinecone upsert
+        chunks_inserted = embed_and_upsert_documents(documents, bot_id, full_text=full_text)
+
+        # Step 4: Mark synced + store S3 reference
+        _mark_synced(table, bot_id, source_sk, chunks_inserted, s3_uri)
+    except Exception as e:
+        _mark_failed(table, bot_id, source_sk, str(e))
+
+@router.post("/pdf")
 async def ingest_pdf(
+    background_tasks: BackgroundTasks,
     bot_id: str = Form(...),
     file: UploadFile = File(...),
 ):
     """
-    Full PDF pipeline:
-      1. Read multipart bytes
-      2. Archive to S3 (s3://vegarag-document-storage-challa/<bot_id>/<filename>)
-      3. Extract text via pypdf
-      4. Chunk → Bedrock Titan embed → Pinecone upsert (namespace=bot_id)
-      5. Record status + S3 URI in DynamoDB
+    Decoupled Asynchronous PDF pipeline:
+      1. Accept multipart upload
+      2. Record 'Syncing...' status in DynamoDB
+      3. Hand off the massive embedding workload to a Background Worker
+      4. Immediately return HTTP 202 Accepted to prevent AWS ALB 60s timeouts
     """
     if not file.filename or not file.filename.lower().endswith(".pdf"):
         raise HTTPException(status_code=400, detail="Only PDF files are accepted.")
@@ -127,31 +145,22 @@ async def ingest_pdf(
     try:
         file_bytes = await file.read()
 
-        # Step 1: Archive to S3 for audit / re-ingestion without re-upload
-        s3_uri = store_pdf_in_s3(file_bytes, bot_id, file.filename)
-
-        # Step 2: Extract → chunk (returns documents + full_text for contextual retrieval)
-        documents, full_text = extract_pdf_to_chunks(file_bytes, file.filename)
-
-        # Step 3: Contextual Retrieval embed → Pinecone upsert
-        # Each chunk gets an LLM-generated context prepended before embedding
-        # so vectors carry full document awareness (Anthropic, 2024)
-        chunks_inserted = embed_and_upsert_documents(documents, bot_id, full_text=full_text)
-
-        # Step 4: Mark synced + store S3 reference
-        _mark_synced(table, bot_id, source_sk, chunks_inserted, s3_uri)
+        # Enqueue background task to process the file
+        background_tasks.add_task(
+            _process_pdf_async,
+            file_bytes,
+            file.filename,
+            bot_id,
+            source_sk,
+            table
+        )
 
         return {
-            "status": "success",
-            "filename": file.filename,
-            "s3_uri": s3_uri,
-            "chunks_memorized": chunks_inserted,
+            "status": "processing",
+            "message": "File accepted for asynchronous processing. Check UI for status.",
+            "filename": file.filename
         }
 
-    except ValueError as e:
-        # User-facing error (image-only PDF, encrypted, etc.)
-        _mark_failed(table, bot_id, source_sk, str(e))
-        raise HTTPException(status_code=422, detail=str(e))
     except Exception as e:
         _mark_failed(table, bot_id, source_sk, str(e))
         raise HTTPException(status_code=500, detail=str(e))

@@ -16,3 +16,15 @@ duckdb
 openpyxl
 pandas
 python-multipart
+structlog
+asgi-correlation-id
+opentelemetry-api
+opentelemetry-sdk
+opentelemetry-instrumentation-fastapi
+opentelemetry-instrumentation-botocore
+opentelemetry-exporter-otlp
+opentelemetry-sdk-extension-aws
+psycopg2-binary
+presidio-analyzer
+presidio-anonymizer
+spacy

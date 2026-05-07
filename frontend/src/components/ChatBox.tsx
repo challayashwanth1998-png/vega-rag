@@ -31,7 +31,7 @@ export function ChatBox({ botId, hasSources = false }: { botId: string, hasSourc
     if (messages.length <= 1 && config) {
        setMessages([{ 
            role: "agent", 
-           content: config.welcome_message || (hasSources ? "Hello! Memory sync complete. Ask me anything about the data you uploaded!" : "Hi! My brain is empty. Please add a Data Source to begin.")
+           content: config.welcome_message || "Hi! How can I assist you today?"
        }]);
     }
   }, [hasSources, config]);
@@ -87,12 +87,15 @@ export function ChatBox({ botId, hasSources = false }: { botId: string, hasSourc
           if (line.startsWith("data: ") && !line.includes("[DONE]")) {
             try {
               const data = JSON.parse(line.replace("data: ", ""));
-              aiResponse += data.text;
-              setMessages(prev => {
-                const newArr = [...prev];
-                newArr[newArr.length - 1].content = aiResponse;
-                return newArr;
-              });
+              // backend emits `tools` chunks (intent, sql_result) without a `text` key!
+              if (data.text !== undefined && data.text !== null) {
+                aiResponse += data.text;
+                setMessages(prev => {
+                  const newArr = [...prev];
+                  newArr[newArr.length - 1].content = aiResponse;
+                  return newArr;
+                });
+              }
             } catch (e) {}
           }
         }

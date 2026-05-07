@@ -14,17 +14,7 @@ export default function HomePage() {
 
   useEffect(() => {
     setMounted(true);
-    if (auth.isAuthenticated) {
-      window.location.href = "/agents";
-    }
-  }, [auth.isAuthenticated]);
-
-  if (!mounted || auth.isLoading)
-    return (
-      <div className="min-h-screen bg-white flex items-center justify-center">
-        <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
-      </div>
-    );
+  }, []);
 
   return (
     <div className="min-h-screen bg-transparent font-sans text-slate-900 selection:bg-blue-100">
@@ -46,10 +36,17 @@ export default function HomePage() {
               Deploy intelligent RAG chat agents powered by your own data. Start for free on our managed cloud, or self-host natively inside your own AWS account.
             </p>
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-              <button onClick={() => auth.signinRedirect()}
-                className="w-full sm:w-auto px-10 py-5 bg-blue-600 text-white text-lg font-black rounded-2xl shadow-xl shadow-blue-600/25 hover:bg-blue-700 hover:-translate-y-1 transition-all flex items-center justify-center gap-2">
-                <Zap className="w-5 h-5" /> Start Building
-              </button>
+              {mounted && auth.isAuthenticated ? (
+                <Link href="/agents"
+                  className="w-full sm:w-auto px-10 py-5 bg-blue-600 text-white text-lg font-black rounded-2xl shadow-xl shadow-blue-600/25 hover:bg-blue-700 hover:-translate-y-1 transition-all flex items-center justify-center gap-2">
+                  <Zap className="w-5 h-5" /> Go to Dashboard
+                </Link>
+              ) : (
+                <button onClick={() => auth.signinRedirect()}
+                  className="w-full sm:w-auto px-10 py-5 bg-blue-600 text-white text-lg font-black rounded-2xl shadow-xl shadow-blue-600/25 hover:bg-blue-700 hover:-translate-y-1 transition-all flex items-center justify-center gap-2">
+                  <Zap className="w-5 h-5" /> Start Building
+                </button>
+              )}
               <Link href="/deploy"
                 className="w-full sm:w-auto px-10 py-5 bg-white border-2 border-slate-200 text-slate-700 text-lg font-black rounded-2xl hover:border-slate-300 hover:-translate-y-1 transition-all flex items-center justify-center gap-2">
                 <Github className="w-5 h-5" /> Deploy Open Source
@@ -58,7 +55,7 @@ export default function HomePage() {
 
             {/* Trust strip */}
             <div className="mt-14 flex flex-wrap justify-center gap-8 text-[11px] font-black text-slate-400 uppercase tracking-widest">
-              {["Amazon Bedrock Nova", "Pinecone Vectors", "LangGraph Agents", "DynamoDB", "AWS Fargate"].map(t => (
+              {["Amazon Bedrock Nova", "PostgreSQL RLS", "Pinecone Semantic Cache", "Microsoft Presidio PII", "AWS Fargate"].map(t => (
                 <div key={t} className="flex items-center gap-2">
                   <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" /> {t}
                 </div>
@@ -79,7 +76,7 @@ export default function HomePage() {
               How VegaRAG Actually Works
             </h2>
             <p className="text-lg text-slate-500 font-medium max-w-3xl mx-auto leading-relaxed">
-              A production-grade RAG platform built on AWS Fargate, LangGraph StateGraph agents, Pinecone vector search, DuckDB SQL analytics, and Amazon Bedrock Nova — every request processed in real-time via Server-Sent Events.
+              A production-grade RAG platform built on AWS Fargate, LangGraph StateGraph agents, Pinecone vector search, PostgreSQL Row-Level Security, and Amazon Bedrock Nova — guarded by Microsoft Presidio PII redaction and dual-LLM hallucination checks.
             </p>
           </div>
 
@@ -155,12 +152,12 @@ export default function HomePage() {
                 <ul className="space-y-2">
                   {[
                     "LangGraph StateGraph orchestrates every agent run end-to-end",
-                    "Amazon Bedrock Nova Lite — intent classification LLM",
-                    "Amazon Titan Embed v2 — 1536-dim text embeddings",
-                    "Pinecone ANN — sub-50ms semantic similarity search",
-                    "DuckDB in-memory SQL execution on uploaded tables",
-                    "FastAPI AsyncIterator SSE streaming to client",
-                    "DynamoDB single-table design for all persistence",
+                    "Semantic Caching (Pinecone-backed <50ms exact-match replies)",
+                    "Token Bucket Rate Limiting (Multi-tenant noisy-neighbor protection)",
+                    "Microsoft Presidio PII Redaction (SSN/Email anonymisation)",
+                    "PostgreSQL Data Warehouse with mandatory Row-Level Security (RLS)",
+                    "Output Guardrails (Dual-LLM entailment checks to block hallucinations)",
+                    "Asynchronous Background Ingestion (No ALB timeouts on large PDFs)",
                   ].map(item => (
                     <li key={item} className="flex gap-2 text-xs text-slate-600">
                       <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 mt-0.5 flex-shrink-0" /> {item}
@@ -258,9 +255,9 @@ export default function HomePage() {
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               {[
                 { title: "DynamoDB (Single Table)", colorClass: "text-blue-600 bg-blue-50", badge: "Primary Store", bullet: "text-blue-500", items: ["PK: USER#{email} → agent list per user", "PK: AGENT#{id} / SK: CONFIG → prompt, brand, chat title/logo", "PK: AGENT#{id} / SK: SOURCE#* → data sources", "PK: ACTIVITY#{id} / SK: ENTRY#* → full chat logs", "PK: STATS#{id} / SK: DAY#* → daily query metrics"] },
-                { title: "Pinecone Vector DB", colorClass: "text-emerald-600 bg-emerald-50", badge: "Semantic Memory", bullet: "text-emerald-500", items: ["Namespace-per-agent isolation (no cross-contamination)", "Amazon Titan v2 embeddings (1536-dim)", "Top-5 cosine similarity ANN retrieval", "Metadata filters: source_type, bot_id", "Sub-50ms query latency at scale"] },
-                { title: "DuckDB (In-Memory)", colorClass: "text-orange-600 bg-orange-50", badge: "SQL Analytics", bullet: "text-orange-500", items: ["CSV/Excel tables loaded at query time from S3", "Text-to-SQL via Bedrock Nova structured output", "GROUP BY, SUM, AVG, COUNT, JOINs fully supported", "Results returned as structured JSON rows", "Stateless — zero persistent storage required"] },
-                { title: "ECR + S3 + CloudWatch", colorClass: "text-purple-600 bg-purple-50", badge: "Ops Layer", bullet: "text-purple-500", items: ["ECR: Docker image registry (one repo per service)", "S3: PDF + CSV ingestion staging bucket", "CloudWatch Logs: /ecs/vegarag-* log streams", "CloudWatch Metrics: task CPU + memory graphs", "ALB access logs for traffic + error analysis"] },
+                { title: "Pinecone Vector DB", colorClass: "text-emerald-600 bg-emerald-50", badge: "Semantic Engine", bullet: "text-emerald-500", items: ["Namespace-per-agent isolation (no cross-contamination)", "Amazon Titan v2 embeddings (1536-dim)", "Top-5 cosine similarity ANN retrieval", "Semantic Caching: Sub-50ms cache hits bypassing LLM", "Sub-50ms query latency at scale"] },
+                { title: "PostgreSQL Data Warehouse", colorClass: "text-orange-600 bg-orange-50", badge: "SQL Analytics", bullet: "text-orange-500", items: ["Mandatory Row-Level Security (SET LOCAL app.current_tenant)", "Text-to-SQL via Bedrock Nova structured output", "Read-only session enforcement (blocks DROP/DELETE)", "Cross-tenant data leakage structurally impossible", "Enterprise-scale persistence and execution"] },
+                { title: "OpenTelemetry + CloudWatch", colorClass: "text-purple-600 bg-purple-50", badge: "Observability", bullet: "text-purple-500", items: ["Structured JSON Logging (TraceID/SpanID injection)", "AWS X-Ray Distributed Waterfall Tracing", "CloudWatch Logs: /ecs/vegarag-* log streams", "CloudWatch Metrics: task CPU + memory graphs", "ALB access logs for traffic + error analysis"] },
               ].map(({ title, colorClass, badge, bullet, items }) => (
                 <div key={title} className="bg-white rounded-2xl p-5 border border-slate-200 hover:shadow-lg transition-all duration-300">
                   <div className={`text-[10px] font-black px-2 py-0.5 rounded-full inline-block mb-3 uppercase tracking-wider ${colorClass}`}>{badge}</div>

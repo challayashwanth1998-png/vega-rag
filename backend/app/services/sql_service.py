@@ -22,6 +22,7 @@ import boto3
 import tempfile
 import duckdb
 import pandas as pd
+import psycopg2
 from langchain_aws import ChatBedrockConverse
 from langchain_core.messages import SystemMessage, HumanMessage
 from app.core.config import settings
@@ -121,6 +122,35 @@ def _build_schema_string(conn: duckdb.DuckDBPyConnection, tables: list[dict]) ->
     return "\n\n".join(parts)
 
 
+def _execute_postgres_query(bot_id: str, sql_query: str, pg_url: str) -> pd.DataFrame:
+    """
+    Enterprise Data Warehouse Execution via PostgreSQL.
+    Enforces Row-Level Security (RLS) and strictly blocks destructive operations.
+    """
+    if not sql_query.strip().upper().startswith("SELECT"):
+        raise Exception("Security Error: Only SELECT statements are permitted in the Data Warehouse.")
+        
+    conn = psycopg2.connect(pg_url)
+    # Enforce Read-Only at the session level to completely neutralize SQL injection (DROP TABLE, etc.)
+    conn.set_session(readonly=True, autocommit=False)
+    
+    try:
+        with conn.cursor() as cur:
+            # 1. Enforce Row-Level Security Context
+            cur.execute(f"SET LOCAL app.current_tenant = '{bot_id}';")
+            
+            # 2. Execute the LLM-generated SQL
+            cur.execute(sql_query)
+            
+            # 3. Fetch results
+            columns = [desc[0] for desc in cur.description] if cur.description else []
+            data = cur.fetchall()
+            return pd.DataFrame(data, columns=columns)
+    finally:
+        conn.commit()  # Commits the SET LOCAL context but transaction is readonly
+        conn.close()
+
+
 def execute_sql_for_bot(bot_id: str, user_query: str, restricted_tables: list[str] | None = None) -> str:
     """
     Full Text-to-SQL pipeline for a given bot and user question.
@@ -146,6 +176,40 @@ def execute_sql_for_bot(bot_id: str, user_query: str, restricted_tables: list[st
             return "You do not have permission to query any of the available data tables."
         return "No CSV or Excel files have been uploaded to this agent yet. Please upload data files first."
 
+    # ── Enterprise Path: Managed Data Warehouse (PostgreSQL) ──
+    pg_url = os.getenv("PG_DATABASE_URL")
+    if pg_url:
+        llm = _get_llm()
+        
+        # Build schema context for Postgres using DynamoDB metadata
+        schema_parts = []
+        for t in tables:
+            tname = t.get("table_name", t["filename"].replace(".", "_").replace("-", "_").replace(" ", "_"))
+            schema_parts.append(f'Table: "{tname}"')
+        pg_schema_str = "\\n".join(schema_parts)
+        
+        messages = [
+            SystemMessage(content=f"""You are an expert SQL analyst. 
+Generate a valid PostgreSQL SELECT query using the tables below.
+Return ONLY the SQL query, no explanation, no markdown code blocks.
+
+{pg_schema_str}"""),
+            HumanMessage(content=user_query)
+        ]
+        sql_resp = llm.invoke(messages)
+        sql_query = sql_resp.content.strip() if isinstance(sql_resp.content, str) else ""
+        sql_query = sql_query.replace("```sql", "").replace("```", "").strip()
+        print(f"[sql_service] Postgres SQL generated: {sql_query}")
+        
+        try:
+            result_df = _execute_postgres_query(bot_id, sql_query, pg_url)
+            if result_df.empty:
+                return "The query returned no results."
+            return result_df.to_string(index=False)
+        except Exception as e:
+            return f"Data Warehouse Execution Error: {e}\\nGenerated query was: {sql_query}"
+
+    # ── Fallback Path: In-Process DuckDB (Ad-Hoc File Loading) ──
     conn = duckdb.connect(":memory:")
     loaded_tables = []
 

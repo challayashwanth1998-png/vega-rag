@@ -1,0 +1,33 @@
+name: RAG Evaluation Quality Gate
+
+on:
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  rag-evaluation:
+    name: Evaluate LLM Context & Faithfulness
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+
+      - name: Install Dependencies
+        run: |
+          cd backend
+          pip install -r requirements.txt
+
+      - name: Run RAG Evaluation (LLM-as-a-Judge)
+        env:
+          AWS_REGION: us-east-1
+          # Requires AWS credentials in GitHub Secrets to run Bedrock
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        run: |
+          cd backend
+          python scripts/evaluate_rag.py

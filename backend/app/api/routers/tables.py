@@ -9,7 +9,7 @@ Data flow:
 
 The sql_service.py reads these records to know which tables exist for SQL queries.
 """
-from fastapi import APIRouter, HTTPException, UploadFile, File, Form
+from fastapi import APIRouter, HTTPException, UploadFile, File, Form, BackgroundTasks
 import boto3
 import io
 import pandas as pd
@@ -45,36 +45,9 @@ def _parse_file(file_bytes: bytes, filename: str) -> pd.DataFrame:
         raise ValueError(f"Unsupported file type: .{ext}")
 
 
-@router.post("/table")
-async def ingest_table(
-    bot_id: str = Form(...),
-    file: UploadFile = File(...),
-):
-    """
-    Accepts CSV or Excel uploads.
-    Stores to S3, parses schema, registers in DynamoDB for SQL querying.
-    """
-    filename = file.filename or "upload"
-    ext = filename.lower().split(".")[-1]
-    if ext not in ("csv", "xlsx", "xls"):
-        raise HTTPException(status_code=400, detail="Only CSV and Excel (.xlsx, .xls) files are accepted.")
-
-    db_table = _get_table()
-    source_sk = f"SOURCE#TABLE#{filename}"
-    table_name = filename.rsplit(".", 1)[0].replace("-", "_").replace(" ", "_")
-
-    db_table.put_item(Item={
-        "PK": f"AGENT#{bot_id}",
-        "SK": source_sk,
-        "url": f"Table: {filename}",
-        "status": "Syncing...",
-        "chunks": 0,
-        "createdAt": datetime.utcnow().isoformat(),
-    })
-
+def _process_table_async(file_bytes: bytes, filename: str, table_name: str, bot_id: str, source_sk: str, db_table):
+    """Background worker task for parsing and saving CSV/Excel tables."""
     try:
-        file_bytes = await file.read()
-
         # 1. Archive to S3
         s3_uri = _store_in_s3(file_bytes, bot_id, filename)
 
@@ -102,14 +75,60 @@ async def ingest_table(
             ExpressionAttributeNames={"#s": "status"},
             ExpressionAttributeValues={":status": "Synced", ":chunks": row_count},
         )
+    except Exception as e:
+        db_table.update_item(
+            Key={"PK": f"AGENT#{bot_id}", "SK": source_sk},
+            UpdateExpression="SET #s = :status, error_msg = :error",
+            ExpressionAttributeNames={"#s": "status"},
+            ExpressionAttributeValues={":status": "Failed", ":error": str(e)},
+        )
+
+@router.post("/table")
+async def ingest_table(
+    background_tasks: BackgroundTasks,
+    bot_id: str = Form(...),
+    file: UploadFile = File(...),
+):
+    """
+    Decoupled Asynchronous Table pipeline:
+    Accepts CSV or Excel uploads, returns immediately, and parses in the background.
+    """
+    filename = file.filename or "upload"
+    ext = filename.lower().split(".")[-1]
+    if ext not in ("csv", "xlsx", "xls"):
+        raise HTTPException(status_code=400, detail="Only CSV and Excel (.xlsx, .xls) files are accepted.")
+
+    db_table = _get_table()
+    source_sk = f"SOURCE#TABLE#{filename}"
+    table_name = filename.rsplit(".", 1)[0].replace("-", "_").replace(" ", "_")
+
+    db_table.put_item(Item={
+        "PK": f"AGENT#{bot_id}",
+        "SK": source_sk,
+        "url": f"Table: {filename}",
+        "status": "Syncing...",
+        "chunks": 0,
+        "createdAt": datetime.utcnow().isoformat(),
+    })
+
+    try:
+        file_bytes = await file.read()
+
+        # Enqueue background task
+        background_tasks.add_task(
+            _process_table_async,
+            file_bytes,
+            filename,
+            table_name,
+            bot_id,
+            source_sk,
+            db_table
+        )
 
         return {
-            "status": "success",
-            "filename": filename,
-            "table_name": table_name,
-            "columns": columns,
-            "row_count": row_count,
-            "s3_uri": s3_uri,
+            "status": "processing",
+            "message": "File accepted for asynchronous processing.",
+            "filename": filename
         }
 
     except Exception as e:

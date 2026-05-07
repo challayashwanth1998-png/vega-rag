@@ -1,0 +1,17 @@
+[
+  {
+    "question": "What is the platform's refund policy?",
+    "context": "VegaRAG offers a 30-day money-back guarantee for all enterprise plans. Refunds are processed within 5-7 business days to the original payment method.",
+    "answer": "You can get a full refund within 30 days of your purchase on enterprise plans, processed within 5-7 business days."
+  },
+  {
+    "question": "How do I contact customer support?",
+    "context": "Support can be reached via email at support@vegarag.com or via the in-app chat widget available 24/7.",
+    "answer": "Contact support via email at support@vegarag.com or use the 24/7 in-app chat."
+  },
+  {
+    "question": "Does VegaRAG support SSO?",
+    "context": "We currently support SAML and OAuth 2.0 based Single Sign-On (SSO) including Okta, Azure AD, and Google Workspace.",
+    "answer": "Yes, it supports SAML and OAuth 2.0 SSO options like Okta, Azure AD, and Google Workspace."
+  }
+]

@@ -1,4 +1,8 @@
 import { NextRequest } from "next/server";
+import pino from "pino";
+
+const logger = pino({ name: "vega.chat.ui", level: process.env.LOG_LEVEL || "info" });
+
 
 const VEGARAG_URL = process.env.VEGARAG_BACKEND_URL || "http://localhost:8000";
 
@@ -71,17 +75,18 @@ function buildExchangeMessages(act: {
   const toolCallId = `tc-${sk}`;
   const intent = act.intent ?? "rag";
   const toolArgs = { intent };
-  // Guard: if ai_response is undefined/empty, content: undefined renders as
-  // the literal string "undefined" in the LangGraph SDK chat UI.
-  const aiContent = act.ai_response || "";
+  // Guard against any cached "undefined" string prepended in previous buggy turns
+  let aiContent = act.ai_response || "";
+  if (aiContent.startsWith("undefined")) {
+    aiContent = aiContent.replace(/^undefined/, "");
+  }
   return [
     { id: `human-${sk}`, type: "human", content: act.user_msg || "" },
     {
-      id: `ai-tool-${sk}`, type: "ai", content: "",
+      id: `ai-${sk}`, type: "ai", content: aiContent,
       tool_calls: [{ id: toolCallId, name: "VegaRAG_Executor", type: "tool_call", args: toolArgs }],
     },
     { id: `tool-${sk}`, type: "tool", name: "VegaRAG_Executor", tool_call_id: toolCallId, content: JSON.stringify(toolArgs) },
-    { id: `ai-${sk}`, type: "ai", content: aiContent },
   ];
 }
 
@@ -90,7 +95,7 @@ async function fetchActivities(thread_id: string): Promise<any[]> {
     const resp = await fetch(`${VEGARAG_URL}/api/activity/session/${thread_id}`);
     if (resp.ok) return await resp.json();
   } catch (e) {
-    console.error("[fetchActivities]", e);
+    logger.error({ err: e, threadId: thread_id }, "[fetchActivities] failed");
   }
   return [];
 }
@@ -127,7 +132,7 @@ export async function GET(
     // Cache hit: return same messages that were streamed (IDs are consistent)
     const cached = cacheGet(thread_id);
     if (cached) {
-      console.log(`[GET /state] cache hit thread=${thread_id} msgs=${cached.length}`);
+      logger.info({ threadId: thread_id, msgsCount: cached.length }, "[GET /state] cache hit");
       return Response.json({
         values: { messages: cached },
         next: [],
@@ -141,7 +146,7 @@ export async function GET(
       const activities = await fetchActivitiesMinCount(thread_id, 1);
       if (activities.length > 0) {
         const messages: any[] = activities.flatMap((a: any) => buildExchangeMessages(a));
-        console.log(`[GET /state] DynamoDB thread=${thread_id} activities=${activities.length} msgs=${messages.length}`);
+        logger.info({ threadId: thread_id, activitiesCount: activities.length, msgsCount: messages.length }, "[GET /state] DynamoDB loaded");
         return Response.json({
           values: { messages },
           next: [],
@@ -151,7 +156,7 @@ export async function GET(
         });
       }
     } catch (e) {
-      console.error("[GET /state]", e);
+      logger.error({ err: e, threadId: thread_id }, "[GET /state] error");
     }
     return Response.json({ values: { messages: [] }, next: [] });
   }
@@ -162,7 +167,7 @@ export async function GET(
     return Response.json({ thread_id, metadata: {}, created_at: new Date().toISOString(), status: "idle" });
   }
 
-  console.log("[GET fallback]", path);
+  logger.info({ path }, "[GET fallback]");
   return Response.json({}, { status: 200 });
 }
 
@@ -201,14 +206,14 @@ export async function POST(
               updated_at: act.timestamp,
               metadata: { graph_id: assistantId, assistant_id: assistantId },
               status: "idle",
-              values: { messages: [{ id: `human-${act.SK}`, type: "human", content: act.user_msg }] },
+              values: { messages: [{ id: `human-${act.SK}`, type: "human", content: act.user_msg || "" }] },
             });
           }
         }
         return Response.json(threads.reverse());
       }
     } catch (e) {
-      console.error("[threads/search]", e);
+      logger.error({ err: e }, "[threads/search] error");
     }
     return Response.json([]);
   }
@@ -239,7 +244,7 @@ export async function POST(
         return Response.json(checkpoints.reverse());
       }
     } catch (e) {
-      console.error("[history]", e);
+      logger.error({ err: e, threadId: thread_id }, "[history] error");
     }
     return Response.json([]);
   }
@@ -271,14 +276,14 @@ export async function POST(
     try {
       const prevActivities = await fetchActivities(thread_id);
       prevMessages = prevActivities.flatMap((a: any) => buildExchangeMessages(a));
-      console.log(`[stream] thread=${thread_id} prevActivities=${prevActivities.length} prevMsgs=${prevMessages.length}`);
+      logger.info({ threadId: thread_id, prevActivities: prevActivities.length, prevMsgs: prevMessages.length }, "[stream] initialized");
     } catch (e) {
-      console.error("[stream] failed to fetch prev:", e);
+      logger.error({ err: e, threadId: thread_id }, "[stream] failed to fetch prev");
     }
 
     // Read logged-in user email from header (set by Stream.tsx via defaultHeaders)
     const userEmail = req.headers.get("x-vegarag-user-email") || undefined;
-    if (userEmail) console.log(`[stream] user_email=${userEmail}`);
+    if (userEmail) logger.info({ threadId: thread_id, userEmail }, "[stream] authenticated user");
 
     try {
       const backendResponse = await fetch(`${VEGARAG_URL}/api/chat`, {
@@ -289,7 +294,7 @@ export async function POST(
 
       if (!backendResponse.ok) {
         const errText = await backendResponse.text();
-        console.error("[stream] backend error:", backendResponse.status, errText);
+        logger.error({ status: backendResponse.status, errText, threadId: thread_id }, "[stream] backend error");
         return new Response(errText, { status: 500 });
       }
 
@@ -317,19 +322,23 @@ export async function POST(
             const msgs: any[] = [...prevMessages]; // all previous completed turns
             if (lastMsg) msgs.push(lastMsg);       // current human message (original SDK UUID)
 
+            // Guard against any lingering 'undefined' concatenation
+            let cleanText = text;
+            if (cleanText.startsWith("undefined")) {
+              cleanText = cleanText.replace(/^undefined/, "");
+            }
+
             if (toolArgs !== null) {
               msgs.push({
-                id: toolCallMsgId, type: "ai", content: "",
+                id: finalMsgId, type: "ai", content: cleanText,
                 tool_calls: [{ id: toolCallId, name: "VegaRAG_Executor", type: "tool_call", args: toolArgs }],
               });
               msgs.push({
                 id: toolResultId, type: "tool", name: "VegaRAG_Executor",
                 tool_call_id: toolCallId, content: JSON.stringify(toolArgs),
               });
-            }
-
-            if (text.length > 0 || toolArgs === null) {
-              msgs.push({ id: finalMsgId, type: "ai", content: text });
+            } else if (cleanText.length > 0) {
+              msgs.push({ id: finalMsgId, type: "ai", content: cleanText });
             }
 
             return msgs;
@@ -365,7 +374,7 @@ export async function POST(
           // immediately — eliminating the DynamoDB write race condition.
           finalMessages = buildMsgs(accumulatedText);
           cacheSet(thread_id, finalMessages);
-          console.log(`[stream] cached ${finalMessages.length} msgs for thread=${thread_id}`);
+          logger.info({ threadId: thread_id, msgsCount: finalMessages.length }, "[stream] cached final messages");
 
           controller.close();
         },
@@ -379,11 +388,11 @@ export async function POST(
         },
       });
     } catch (e) {
-      console.error("[stream] proxy error", e);
+      logger.error({ err: e, threadId: thread_id }, "[stream] proxy error");
       return new Response("Proxy error", { status: 500 });
     }
   }
 
-  console.log("[POST fallback]", path);
+  logger.info({ path }, "[POST fallback]");
   return Response.json({}, { status: 200 });
 }

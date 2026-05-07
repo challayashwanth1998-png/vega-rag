@@ -11,6 +11,10 @@
 # =============================================================================
 
 REPO_ROOT="$(cd "$(dirname "$0")" && pwd)"
+
+# Ensure Homebrew and custom binaries are in PATH
+export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
+
 FRONTEND_DIR="$REPO_ROOT/frontend"
 BACKEND_DIR="$REPO_ROOT/backend"
 CHAT_UI_DIR="$REPO_ROOT/agent-chat-ui"

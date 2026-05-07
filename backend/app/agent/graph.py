@@ -26,7 +26,10 @@ Why this separation from chat.py:
   This graph is focused on pure intelligent retrieval — chat.py handles generation.
 """
 import boto3
+from opentelemetry import trace
 from typing import TypedDict, Literal
+
+tracer = trace.get_tracer(__name__)
 from pydantic import BaseModel, Field
 from langgraph.graph import StateGraph, END
 from langchain_aws import ChatBedrockConverse
@@ -39,8 +42,10 @@ from app.services.sql_service import execute_sql_for_bot
 from app.core.config import settings
 
 # ── Corrective RAG threshold ──────────────────────────────────────────────────
-# Avg chunk relevance (0–10) below this triggers query rewrite + re-retrieval
-QUALITY_THRESHOLD = 4.0
+# Avg chunk relevance (0–10) below this triggers query rewrite + re-retrieval.
+# Set conservatively — CRAG should only correct clearly irrelevant retrieval.
+# Too aggressive causes false corrections that DROP valid context.
+QUALITY_THRESHOLD = 3.0
 # Number of chunks to initially fetch (wide net for hybrid reranking)
 INITIAL_TOP_K = 15
 # Final number of chunks sent to the LLM
@@ -84,20 +89,21 @@ class RouterDecision(BaseModel):
 
 def router_node(state: AgentState) -> AgentState:
     """LLM-based intent classification via structured output."""
-    llm = _get_llm().with_structured_output(RouterDecision)
-    try:
-        resp = llm.invoke([
-            SystemMessage(content="You are an expert intent classifier. Decide the most appropriate execution path."),
-            HumanMessage(content=state["query"])
-        ])
-        intent = resp.intent
-    except Exception as e:
-        print(f"[router] structured output fallback: {e}")
-        intent = "rag"
+    with tracer.start_as_current_span("classify_intent"):
+        llm = _get_llm().with_structured_output(RouterDecision)
+        try:
+            resp = llm.invoke([
+                SystemMessage(content="You are an expert intent classifier. Decide the most appropriate execution path."),
+                HumanMessage(content=state["query"])
+            ])
+            intent = resp.intent
+        except Exception as e:
+            print(f"[router] structured output fallback: {e}")
+            intent = "rag"
 
-    intent = intent if intent in ("casual", "rag", "sql") else "rag"
-    print(f"[router] '{state['query'][:60]}' → {intent}")
-    return {"intent": intent}
+        intent = intent if intent in ("casual", "rag", "sql") else "rag"
+        print(f"[router] '{state['query'][:60]}' → {intent}")
+        return {"intent": intent}
 
 
 def route_decision(state: AgentState) -> Literal["casual", "rag", "sql"]:
@@ -123,40 +129,42 @@ def rag_node(state: AgentState) -> AgentState:
     This captures both semantic similarity AND exact keyword/entity matches,
     consistently outperforming either method alone.
     """
-    try:
-        query_vector = embeddings.embed_query(state["query"])
-        results = index.query(
-            namespace=state["bot_id"],
-            vector=query_vector,
-            top_k=INITIAL_TOP_K,
-            include_metadata=True,
-        )
-        matches = results.get("matches", [])
-        if not matches:
+    with tracer.start_as_current_span("hybrid_search") as span:
+        span.set_attribute("search.top_k", INITIAL_TOP_K)
+        try:
+            query_vector = embeddings.embed_query(state["query"])
+            results = index.query(
+                namespace=state["bot_id"],
+                vector=query_vector,
+                top_k=INITIAL_TOP_K,
+                include_metadata=True,
+            )
+            matches = results.get("matches", [])
+            if not matches:
+                return {"context": "", "sql_result": "", "retrieval_quality": 0.0}
+
+            # BM25 score each candidate against the query
+            bm25_scores = {}
+            for match in matches:
+                text = match.get("metadata", {}).get("text", "")
+                bm25_scores[match["id"]] = bm25_score(state["query"], text)
+
+            # RRF fusion: merge vector rank + BM25 rank
+            fused = reciprocal_rank_fusion(matches, bm25_scores)
+            top_matches = [m for m, _ in fused[:FINAL_TOP_K]]
+
+            chunks = [
+                m["metadata"]["text"]
+                for m in top_matches
+                if "text" in m.get("metadata", {})
+            ]
+            context = "\n\n---\n\n".join(chunks)
+            print(f"[rag] hybrid search: {len(matches)} candidates → {len(chunks)} after RRF")
+            return {"context": context, "sql_result": "", "retrieval_quality": 5.0}
+
+        except Exception as e:
+            print(f"[rag] error: {e}")
             return {"context": "", "sql_result": "", "retrieval_quality": 0.0}
-
-        # BM25 score each candidate against the query
-        bm25_scores = {}
-        for match in matches:
-            text = match.get("metadata", {}).get("text", "")
-            bm25_scores[match["id"]] = bm25_score(state["query"], text)
-
-        # RRF fusion: merge vector rank + BM25 rank
-        fused = reciprocal_rank_fusion(matches, bm25_scores)
-        top_matches = [m for m, _ in fused[:FINAL_TOP_K]]
-
-        chunks = [
-            m["metadata"]["text"]
-            for m in top_matches
-            if "text" in m.get("metadata", {})
-        ]
-        context = "\n\n---\n\n".join(chunks)
-        print(f"[rag] hybrid search: {len(matches)} candidates → {len(chunks)} after RRF")
-        return {"context": context, "sql_result": "", "retrieval_quality": 5.0}
-
-    except Exception as e:
-        print(f"[rag] error: {e}")
-        return {"context": "", "sql_result": "", "retrieval_quality": 0.0}
 
 
 # ── Node 2b-2: CRAG — Corrective RAG ─────────────────────────────────────────
@@ -175,86 +183,92 @@ def crag_node(state: AgentState) -> AgentState:
     This prevents the LLM from hallucinating confident answers based on
     irrelevant retrieved chunks — the most common failure mode in production RAG.
     """
-    context = state.get("context", "")
-    if not context:
-        return {"retrieval_quality": 0.0}
+    with tracer.start_as_current_span("corrective_rag") as span:
+        context = state.get("context", "")
+        if not context:
+            return {"retrieval_quality": 0.0}
 
-    chunks = [c.strip() for c in context.split("\n\n---\n\n") if c.strip()]
-    if not chunks:
-        return {"retrieval_quality": 0.0}
+        chunks = [c.strip() for c in context.split("\n\n---\n\n") if c.strip()]
+        if not chunks:
+            return {"retrieval_quality": 0.0}
 
-    query = state["query"]
-    llm = _get_llm(max_tokens=10)
+        query = state["query"]
+        llm = _get_llm(max_tokens=10)
 
-    # ── Score each chunk ──────────────────────────────────────────────────────
-    scores = []
-    for chunk in chunks[:5]:
-        try:
-            resp = llm.invoke([
-                SystemMessage(content=(
-                    "Rate how relevant the following TEXT is to the QUERY. "
-                    "Respond with ONLY a single integer 0-10. No other text."
-                )),
-                HumanMessage(content=f"QUERY: {query}\n\nTEXT: {chunk[:400]}")
-            ])
-            raw = resp.content.strip().split()[0]
-            scores.append(min(10.0, max(0.0, float(raw))))
-        except Exception:
-            scores.append(5.0)  # assume acceptable on error
+        # ── Score each chunk ──────────────────────────────────────────────────────
+        scores = []
+        for chunk in chunks[:5]:
+            try:
+                resp = llm.invoke([
+                    SystemMessage(content=(
+                        "Rate how relevant the following TEXT is to the QUERY. "
+                        "Respond with ONLY a single integer 0-10. No other text."
+                    )),
+                    HumanMessage(content=f"QUERY: {query}\n\nTEXT: {chunk[:400]}")
+                ])
+                raw = resp.content.strip().split()[0]
+                scores.append(min(10.0, max(0.0, float(raw))))
+            except Exception:
+                scores.append(5.0)  # assume acceptable on error
 
-    avg_score = sum(scores) / len(scores) if scores else 0.0
-    print(f"[crag] relevance scores: {scores} → avg={avg_score:.1f}")
+        avg_score = sum(scores) / len(scores) if scores else 0.0
+        span.set_attribute("crag.avg_score", avg_score)
+        print(f"[crag] relevance scores: {scores} → avg={avg_score:.1f}")
 
-    # ── Corrective action if quality is low ───────────────────────────────────
-    if avg_score < QUALITY_THRESHOLD:
-        print(f"[crag] quality below threshold ({avg_score:.1f} < {QUALITY_THRESHOLD}) → rewriting query")
-        rewrite_llm = _get_llm(max_tokens=80)
-        try:
-            rewrite_resp = rewrite_llm.invoke([
-                SystemMessage(content=(
-                    "You are a query optimization expert. Rewrite the following query to be more "
-                    "specific and targeted so that a semantic search retrieves better results. "
-                    "Return ONLY the rewritten query, no explanation."
-                )),
-                HumanMessage(content=query)
-            ])
-            rewritten = rewrite_resp.content.strip()
-            print(f"[crag] rewritten query: {rewritten[:80]}")
-        except Exception:
-            rewritten = query  # fallback to original
+        # ── Corrective action if quality is low ───────────────────────────────────
+        if avg_score < QUALITY_THRESHOLD:
+            print(f"[crag] quality below threshold ({avg_score:.1f} < {QUALITY_THRESHOLD}) → rewriting query")
+            rewrite_llm = _get_llm(max_tokens=80)
+            try:
+                rewrite_resp = rewrite_llm.invoke([
+                    SystemMessage(content=(
+                        "You are a query optimization expert. Rewrite the following query to be more "
+                        "specific and targeted so that a semantic search retrieves better results. "
+                        "Return ONLY the rewritten query, no explanation."
+                    )),
+                    HumanMessage(content=query)
+                ])
+                rewritten = rewrite_resp.content.strip()
+                print(f"[crag] rewritten query: {rewritten[:80]}")
+            except Exception:
+                rewritten = query  # fallback to original
 
-        # Re-retrieve with the rewritten query (hybrid)
-        try:
-            query_vector = embeddings.embed_query(rewritten)
-            results = index.query(
-                namespace=state["bot_id"],
-                vector=query_vector,
-                top_k=INITIAL_TOP_K,
-                include_metadata=True,
-            )
-            matches = results.get("matches", [])
-            if matches:
-                from app.services.pinecone_service import bm25_score as _bm25
-                from app.services.pinecone_service import reciprocal_rank_fusion as _rrf
-                bm25_scores = {
-                    m["id"]: _bm25(rewritten, m.get("metadata", {}).get("text", ""))
-                    for m in matches
-                }
-                fused = _rrf(matches, bm25_scores)
-                top_matches = [m for m, _ in fused[:FINAL_TOP_K]]
-                new_chunks = [
-                    m["metadata"]["text"]
-                    for m in top_matches
-                    if "text" in m.get("metadata", {})
-                ]
-                if new_chunks:
-                    new_context = "\n\n---\n\n".join(new_chunks)
-                    print(f"[crag] corrected context: {len(new_chunks)} new chunks")
-                    return {"context": new_context, "retrieval_quality": avg_score}
-        except Exception as e:
-            print(f"[crag] re-retrieval failed: {e}")
+            # Re-retrieve with the rewritten query (hybrid)
+            try:
+                query_vector = embeddings.embed_query(rewritten)
+                results = index.query(
+                    namespace=state["bot_id"],
+                    vector=query_vector,
+                    top_k=INITIAL_TOP_K,
+                    include_metadata=True,
+                )
+                matches = results.get("matches", [])
+                if matches:
+                    from app.services.pinecone_service import bm25_score as _bm25
+                    from app.services.pinecone_service import reciprocal_rank_fusion as _rrf
+                    bm25_scores = {
+                        m["id"]: _bm25(rewritten, m.get("metadata", {}).get("text", ""))
+                        for m in matches
+                    }
+                    fused = _rrf(matches, bm25_scores)
+                    top_matches = [m for m, _ in fused[:FINAL_TOP_K]]
+                    new_chunks = [
+                        m["metadata"]["text"]
+                        for m in top_matches
+                        if "text" in m.get("metadata", {})
+                    ]
+                    if new_chunks:
+                        new_context = "\n\n---\n\n".join(new_chunks)
+                        print(f"[crag] corrected context: {len(new_chunks)} new chunks")
+                        return {"context": new_context, "retrieval_quality": avg_score}
+                    else:
+                        # Re-retrieval got nothing — keep original context
+                        print(f"[crag] re-retrieval empty, keeping original context")
+            except Exception as e:
+                print(f"[crag] re-retrieval failed: {e}")
+                # Keep original context on any error
 
-    return {"retrieval_quality": avg_score}
+        return {"retrieval_quality": avg_score}
 
 
 # ── Node 2c: SQL — DuckDB Text-to-SQL ────────────────────────────────────────
@@ -264,16 +278,17 @@ def sql_node(state: AgentState) -> AgentState:
     Runs the Text-to-SQL pipeline: lists bot tables → generates SQL → executes via DuckDB.
     Restricted tables are filtered out before the LLM ever sees the schema.
     """
-    try:
-        result = execute_sql_for_bot(
-            state["bot_id"],
-            state["query"],
-            restricted_tables=state.get("restricted_tables") or [],
-        )
-        print(f"[sql] result preview: {result[:100]}")
-    except Exception as e:
-        result = f"SQL error: {e}"
-    return {"sql_result": result, "context": "", "retrieval_quality": 10.0}
+    with tracer.start_as_current_span("text_to_sql") as span:
+        try:
+            result = execute_sql_for_bot(
+                state["bot_id"],
+                state["query"],
+                restricted_tables=state.get("restricted_tables") or [],
+            )
+            print(f"[sql] result preview: {result[:100]}")
+        except Exception as e:
+            result = f"SQL error: {e}"
+        return {"sql_result": result, "context": "", "retrieval_quality": 10.0}
 
 
 # ── Graph Assembly ────────────────────────────────────────────────────────────

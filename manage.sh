@@ -5,6 +5,9 @@
 # =============================================================================
 set -euo pipefail
 
+# Ensure Homebrew and custom binaries are in PATH
+export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
+
 # ── Config ────────────────────────────────────────────────────────────────────
 AWS_REGION="us-east-1"
 ACCOUNT_ID="519008639833"
