@@ -11,6 +11,7 @@
 [![Bedrock](https://img.shields.io/badge/Amazon_Bedrock-Nova-FF9900?logo=amazon-aws)](https://aws.amazon.com/bedrock/)
 [![Pinecone](https://img.shields.io/badge/Pinecone-Vector_DB-00B388)](https://pinecone.io)
 [![License](https://img.shields.io/badge/License-MIT-green)](LICENSE)
+[![Visitors](https://visitor-badge.laobi.icu/badge?page_id=challayashwanth1998-png.vega-rag)](https://github.com/challayashwanth1998-png/vega-rag)
 
 *Build, deploy, and manage intelligent AI chatbots backed by your own documents and data — with enterprise security, multi-tenancy, and zero infrastructure headaches.*
 
@@ -22,9 +23,7 @@
 
 <div align="center">
 
-[<img src="https://img.shields.io/badge/▶%20Watch%20Demo-Click%20to%20Play-FF0000?style=for-the-badge&logo=github" width="250"/>](https://github.com/challayashwanth1998-png/vega-rag/releases/download/v2.0.0/vegarag-demo.mp4)
-
-*Click to download & play the full demo — bot setup, PDF upload, live chat, per-user restrictions*
+https://github.com/challayashwanth1998-png/vega-rag/assets/demo.mp4
 
 </div>
 
