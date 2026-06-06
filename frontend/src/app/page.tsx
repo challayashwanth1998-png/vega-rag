@@ -3,7 +3,7 @@ import React, { useEffect, useState } from "react";
 import { useAuth } from "@/components/Providers";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
-import { ArrowRight, Loader2, CheckCircle2, Zap, Database, Layers, Bot, Github, Terminal } from "lucide-react";
+import { ArrowRight, Loader2, CheckCircle2, Zap, Database, Layers, Bot, Github, Terminal, GitBranch, Search, TreePine, Combine } from "lucide-react";
 import Link from "next/link";
 import { MarketingNav } from "@/components/MarketingNav";
 
@@ -59,7 +59,7 @@ export default function HomePage() {
 
             {/* Trust strip */}
             <div className="mt-14 flex flex-wrap justify-center gap-8 text-[11px] font-black text-slate-400 uppercase tracking-widest">
-              {["Amazon Bedrock Nova", "PostgreSQL RLS", "Pinecone Semantic Cache", "Microsoft Presidio PII", "AWS Fargate"].map(t => (
+              {["Amazon Bedrock Nova", "Hybrid Retrieval (3-Mode)", "Pinecone Semantic Cache", "Microsoft Presidio PII", "AWS Fargate"].map(t => (
                 <div key={t} className="flex items-center gap-2">
                   <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" /> {t}
                 </div>
@@ -201,12 +201,12 @@ export default function HomePage() {
                 <ul className="space-y-2">
                   {[
                     "LangGraph StateGraph orchestrates every agent run end-to-end",
+                    "Hybrid Retrieval Engine: Vector (BM25+Pinecone+RRF), Structural (LLM tree walking), or blended — chosen per query",
+                    "Corrective RAG (CRAG): scores retrieved chunks and self-corrects with query rewriting",
                     "Semantic Caching (Pinecone-backed <50ms exact-match replies)",
-                    "Token Bucket Rate Limiting (Multi-tenant noisy-neighbor protection)",
                     "Microsoft Presidio PII Redaction (SSN/Email anonymisation)",
-                    "PostgreSQL Data Warehouse with mandatory Row-Level Security (RLS)",
+                    "Token Bucket Rate Limiting (Multi-tenant noisy-neighbor protection)",
                     "Output Guardrails (Dual-LLM entailment checks to block hallucinations)",
-                    "Asynchronous Background Ingestion (No ALB timeouts on large PDFs)",
                   ].map(item => (
                     <li key={item} className="flex gap-2 text-xs text-slate-600">
                       <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 mt-0.5 flex-shrink-0" /> {item}
@@ -254,13 +254,13 @@ export default function HomePage() {
               <div className="flex-1 h-px bg-slate-100" />
             </div>
             <div className="bg-slate-900 rounded-3xl p-8 text-white">
-              <div className="grid grid-cols-1 md:grid-cols-9 gap-0 items-start">
+              <div className="grid grid-cols-1 md:grid-cols-11 gap-0 items-start">
                 {[
-                  { step: "01", title: "Entry Node", color: "blue", desc: "User query enters StateGraph. Session ID, bot_id, conversation history loaded from DynamoDB context." },
-                  { step: "02", title: "Intent Router", color: "purple", desc: "Bedrock Nova Lite classifies as casual, rag, or sql using strict JSON schema structured output parsing." },
-                  { step: "03", title: "Branch Executor", color: "orange", desc: "Conditional edge dispatches to RAG retriever node, SQL executor node, or direct casual LLM node." },
-                  { step: "04", title: "Context Injector", color: "emerald", desc: "Retrieved Pinecone chunks or DuckDB SQL rows injected into prompt as <context>...</context> XML markers." },
-                  { step: "05", title: "SSE Streamer", color: "pink", desc: "Bedrock Nova Pro streams tokens. FastAPI yields each chunk as SSE to the Chat UI proxy and then to the browser." },
+                  { step: "01", title: "Intent Router", color: "purple", desc: "Nova Micro classifies query as casual, rag, or sql via strict JSON structured output. Zero hallucination risk." },
+                  { step: "02", title: "Retrieval Router", color: "emerald", desc: "For RAG queries, LLM picks the best retrieval strategy per query: vector, structural, or hybrid blend." },
+                  { step: "03", title: "3-Mode Retriever", color: "blue", desc: "Vector: BM25+Pinecone+RRF fusion. Structural: LLM-guided tree walking. Hybrid: both + dedupe + rerank." },
+                  { step: "04", title: "CRAG Correction", color: "orange", desc: "Scores each chunk's relevance 0-10. If avg below threshold → rewrites query + re-retrieves. Self-healing retrieval." },
+                  { step: "05", title: "SSE Streamer", color: "pink", desc: "Bedrock Nova streams tokens. FastAPI yields each chunk as SSE to the Chat UI proxy and then to the browser." },
                 ].map(({ step, title, color, desc }, i) => (
                   <React.Fragment key={step}>
                     <div className="flex flex-col items-center text-center p-3">
@@ -291,6 +291,117 @@ export default function HomePage() {
             <div className="flex flex-col items-center">
               <div className="w-px h-8 bg-gradient-to-b from-slate-200 to-purple-400" />
               <div className="w-0 h-0 border-l-4 border-r-4 border-t-4 border-l-transparent border-r-transparent border-t-purple-400" />
+            </div>
+          </div>
+
+          {/* ── Layer 3.5: Hybrid Retrieval Architecture ── */}
+          <div className="mb-6">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-blue-600 to-violet-600 text-white flex items-center justify-center text-xs font-black">HR</div>
+              <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest">Layer 3.5 — Hybrid Retrieval Engine (New)</h3>
+              <div className="flex-1 h-px bg-slate-100" />
+              <span className="text-[10px] font-black text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200 uppercase tracking-wider">3-Mode Adaptive</span>
+            </div>
+
+            <div className="bg-gradient-to-br from-indigo-50 via-violet-50 to-blue-50 rounded-3xl p-8 border border-indigo-100 mb-5">
+              <div className="text-center mb-8">
+                <h3 className="text-xl font-black text-slate-900 mb-2">Retrieval Strategy — Chosen Per Query at Runtime</h3>
+                <p className="text-sm text-slate-500 font-medium max-w-2xl mx-auto">The Retrieval Router uses LLM classification to pick the optimal strategy for each query. Admins can also pin a strategy per agent in Settings.</p>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mb-8">
+                {/* Vector */}
+                <div className="bg-white rounded-2xl p-6 border-2 border-blue-100 hover:border-blue-300 hover:shadow-lg transition-all">
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="w-10 h-10 rounded-xl bg-blue-100 flex items-center justify-center"><Search className="w-5 h-5 text-blue-600" /></div>
+                    <div>
+                      <div className="font-black text-slate-900 text-sm">Vector Retrieval</div>
+                      <div className="text-[10px] font-black text-blue-600 uppercase tracking-wider">BM25 + Pinecone + RRF Fusion</div>
+                    </div>
+                  </div>
+                  <ul className="space-y-2">
+                    {[
+                      "Embeds query with Amazon Titan v2 → Pinecone top-15 ANN search",
+                      "BM25 keyword scoring catches exact-match entity names and IDs",
+                      "Reciprocal Rank Fusion merges both rankings → top-5 final chunks",
+                      "Best for: semantic/conversational queries, paraphrase-style lookups",
+                    ].map(item => (
+                      <li key={item} className="flex gap-2 text-xs text-slate-500 leading-relaxed">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-blue-500 mt-0.5 flex-shrink-0" /> {item}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+
+                {/* Structural */}
+                <div className="bg-white rounded-2xl p-6 border-2 border-violet-100 hover:border-violet-300 hover:shadow-lg transition-all">
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="w-10 h-10 rounded-xl bg-violet-100 flex items-center justify-center"><TreePine className="w-5 h-5 text-violet-600" /></div>
+                    <div>
+                      <div className="font-black text-slate-900 text-sm">Structural Retrieval</div>
+                      <div className="text-[10px] font-black text-violet-600 uppercase tracking-wider">LLM-Guided Tree Walking</div>
+                    </div>
+                  </div>
+                  <ul className="space-y-2">
+                    {[
+                      "At ingestion, Nova Micro builds a 3-level hierarchical TOC tree per document",
+                      "At query time, LLM scores section titles/summaries → descends best branch",
+                      "Returns raw text from char ranges — no embeddings needed",
+                      "Best for: section-oriented queries like 'what does chapter 3 say?'",
+                    ].map(item => (
+                      <li key={item} className="flex gap-2 text-xs text-slate-500 leading-relaxed">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-violet-500 mt-0.5 flex-shrink-0" /> {item}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+
+                {/* Hybrid */}
+                <div className="bg-white rounded-2xl p-6 border-2 border-amber-100 hover:border-amber-300 hover:shadow-lg transition-all">
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="w-10 h-10 rounded-xl bg-amber-100 flex items-center justify-center"><Combine className="w-5 h-5 text-amber-600" /></div>
+                    <div>
+                      <div className="font-black text-slate-900 text-sm">Hybrid Blend</div>
+                      <div className="text-[10px] font-black text-amber-600 uppercase tracking-wider">Merge + Dedupe + Rerank</div>
+                    </div>
+                  </div>
+                  <ul className="space-y-2">
+                    {[
+                      "Runs both vector and structural retrievers in sequence",
+                      "Deduplicates overlapping passages by SHA-256 content hash",
+                      "Nova Micro reranks the combined set with 0-10 relevance scoring",
+                      "Best for: ambiguous queries or documents with mixed structure",
+                    ].map(item => (
+                      <li key={item} className="flex gap-2 text-xs text-slate-500 leading-relaxed">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-amber-500 mt-0.5 flex-shrink-0" /> {item}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+
+              {/* CRAG + Cost Note */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                <div className="bg-white rounded-2xl p-5 border border-slate-200">
+                  <div className="flex items-center gap-2 mb-3">
+                    <div className="w-7 h-7 rounded-lg bg-orange-100 flex items-center justify-center"><GitBranch className="w-4 h-4 text-orange-600" /></div>
+                    <div className="font-black text-slate-900 text-sm">Corrective RAG (CRAG)</div>
+                  </div>
+                  <p className="text-xs text-slate-500 leading-relaxed">
+                    After retrieval, CRAG scores each chunk's relevance to the query on a 0-10 scale. If the average score drops below the quality threshold, it automatically rewrites the query to be more specific and re-retrieves — preventing the LLM from hallucinating based on irrelevant context. This self-healing loop runs transparently on every RAG request.
+                  </p>
+                </div>
+
+                <div className="bg-emerald-50 rounded-2xl p-5 border border-emerald-100">
+                  <div className="flex items-center gap-2 mb-3">
+                    <div className="w-7 h-7 rounded-lg bg-emerald-100 flex items-center justify-center"><Zap className="w-4 h-4 text-emerald-600" /></div>
+                    <div className="font-black text-slate-900 text-sm">Zero Additional AWS Costs</div>
+                  </div>
+                  <p className="text-xs text-slate-500 leading-relaxed">
+                    Hybrid retrieval uses the exact same Bedrock models (Nova Micro), DynamoDB table, and Pinecone index already provisioned. Document trees are stored as additional items in the existing DynamoDB single-table design. No new AWS resources, no new services, no new bills. The structural retriever adds ~2 LLM calls per query — pennies at Nova Micro pricing.
+                  </p>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -338,9 +449,9 @@ export default function HomePage() {
                 ["5", "User types a message and submits the chat form", "SDK fires POST /chat/api/langgraph/threads/{thread_id}/runs/stream with message payload"],
                 ["6", "Next.js proxy receives request, extracts query text + bot_id", "Forwards to backend POST /api/chat as {bot_id, session_id, query} JSON body"],
                 ["7", "FastAPI receives request, starts LangGraph StateGraph run", "Entry node loads conversation history from DynamoDB, initializes GraphState"],
-                ["8", "Intent Router node calls Bedrock Nova Lite with structured schema", "LLM returns JSON: {intent: 'rag'|'sql'|'casual'} — conditional edge dispatches to correct branch"],
-                ["9", "RAG branch: Titan v2 embeds query → Pinecone top-5 cosine ANN search", "SQL branch: Nova generates SQL → DuckDB executes in-memory → structured rows returned"],
-                ["10", "Context injected into Nova Pro prompt via <context>...</context> XML markers", "FastAPI AsyncIterator chunks Bedrock token stream → yields SSE events: data: {text: '...'}"],
+                ["8", "Intent Router node calls Bedrock Nova Micro with structured schema", "LLM returns JSON: {intent: 'rag'|'sql'|'casual'} — conditional edge dispatches to correct branch"],
+                ["9", "RAG branch: Retrieval Router picks strategy → Vector, Structural, or Hybrid", "Vector: Titan v2 embed + Pinecone + BM25+RRF. Structural: LLM walks document tree. Hybrid: both + rerank."],
+                ["10", "CRAG node scores chunk relevance 0-10. Low scores → query rewrite + re-retrieve", "Self-correcting retrieval prevents hallucination from irrelevant context. Context injected as <context>XML</context>"],
                 ["11", "Next.js proxy re-wraps backend SSE as valid LangGraph values events", "Browser LangGraph SDK React hook receives events, updates message state, renders tokens progressively"],
                 ["12", "Stream ends. SDK fires GET /chat/api/langgraph/threads/{id}/state", "Proxy fetches full session from DynamoDB, reconstructs LangGraph message format with stable IDs"],
               ].map(([num, left, right]) => (

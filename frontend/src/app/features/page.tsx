@@ -86,6 +86,7 @@ export default function FeaturesPage() {
           {[
             ["#aws-infra", "AWS Infrastructure"],
             ["#langgraph", "LangGraph Agent"],
+            ["#hybrid-retrieval", "Hybrid Retrieval"],
             ["#rag-pipeline", "RAG Pipeline"],
             ["#sql-engine", "Postgres Data Warehouse"],
             ["#security", "Enterprise Guardrails"],
@@ -196,8 +197,12 @@ export default function FeaturesPage() {
                 { field: "bot_id", desc: "Which agent is responding — determines which Pinecone namespace, system prompt, and DynamoDB records to use." },
                 { field: "session_id", desc: "Identifies the conversation thread — used to group activity records for history." },
                 { field: "intent", desc: "Populated after the intent router runs: exactly one of 'casual', 'rag', or 'sql'." },
-                { field: "retrieved_context", desc: "Populated by the RAG retriever — the top-5 document chunks concatenated as a single string." },
-                { field: "sql_result", desc: "Populated by the SQL executor — the DuckDB query result formatted as a markdown table." },
+                { field: "retrieved_context", desc: "Populated by whichever retriever runs — the top-5 document chunks concatenated as a single string." },
+                { field: "retrieval_mode", desc: "Agent-level config: 'auto' (default), 'vector', 'structural', or 'hybrid'. Drives the retrieval router." },
+                { field: "retrieval_strategy", desc: "Set by the retrieval router — the actual strategy used for this specific query." },
+                { field: "retrieval_trace", desc: "Observability log: which sections/trees were walked, scores, fallback decisions." },
+                { field: "retrieval_source", desc: "Source attribution: which retriever produced each final chunk." },
+                { field: "sql_result", desc: "Populated by the SQL executor — the query result formatted as a markdown table." },
                 { field: "final_response", desc: "Set after Bedrock response generation — the full streamed AI reply." },
               ].map(({ field, desc }) => (
                 <div key={field} className="bg-slate-50 rounded-xl p-3">
@@ -209,17 +214,21 @@ export default function FeaturesPage() {
           </DetailCard>
 
           <div className="space-y-5">
-            <DetailCard title="The 5-Node Graph Topology">
+            <DetailCard title="The 8-Node Graph Topology">
               <div className="space-y-4">
                 {[
-                  { step: "START", title: "Entry", color: "bg-slate-600", desc: "LangGraph's built-in START node. Receives the initial state and immediately passes it to the intent router. No logic here — just the graph entry point." },
-                  { step: "01", title: "Intent Router Node", color: "bg-purple-600", desc: "Calls Bedrock Nova Lite with the user's query and a strict JSON schema. The LLM must return exactly one of three intents. Uses temperature=0 for maximum determinism. No hallucination risk — the schema enforces the output format." },
-                  { step: "→", title: "Conditional Edge", color: "bg-orange-500", desc: "A routing function reads the intent from state and returns a node name as a string. LangGraph uses this to decide the next node. This is the only branching point in the entire graph." },
-                  { step: "02a", title: "RAG Retriever Node", color: "bg-emerald-600", desc: "Only runs if intent='rag'. Embeds the query with Titan v2, queries Pinecone, and appends the top-5 chunks to state as retrieved_context." },
-                  { step: "02b", title: "SQL Executor Node", color: "bg-orange-600", desc: "Only runs if intent='sql'. Fetches table schemas from DynamoDB, asks Nova Lite to generate DuckDB SQL, executes it against the S3 CSV via HTTPFS, and appends the result table to state." },
-                  { step: "03", title: "Response Generation Node", color: "bg-blue-600", desc: "All three branches converge here. Injects context (RAG chunks or SQL table, or nothing for casual) into the Bedrock Nova Pro prompt via XML <context> markers and streams tokens back via SSE." },
+                  { step: "START", title: "Entry", color: "bg-slate-600", desc: "LangGraph's built-in START node. Receives the initial state and immediately passes it to the intent router." },
+                  { step: "01", title: "Intent Router Node", color: "bg-purple-600", desc: "Calls Bedrock Nova Micro with the user's query and a strict JSON schema. Returns exactly one of three intents: casual, rag, or sql." },
+                  { step: "→", title: "Conditional Edge", color: "bg-orange-500", desc: "Routes to casual node, retrieval router (rag), or SQL executor. This is the first branching point." },
+                  { step: "02", title: "Retrieval Router", color: "bg-emerald-600", desc: "Only runs for intent=rag. Uses LLM classification to pick the retrieval strategy: vector, structural, or hybrid. Can also be pinned per agent in settings." },
+                  { step: "→", title: "Strategy Edge", color: "bg-emerald-500", desc: "Second conditional edge dispatches to one of three retriever nodes based on the chosen strategy." },
+                  { step: "03a", title: "Vector Retriever", color: "bg-blue-600", desc: "BM25 + Pinecone vector + Reciprocal Rank Fusion. Captures both semantic similarity and exact keyword matches." },
+                  { step: "03b", title: "Structural Retriever", color: "bg-violet-600", desc: "LLM-guided tree walking over document TOC structure. Scores section titles/summaries at each level, descends into best branch." },
+                  { step: "03c", title: "Hybrid Retriever", color: "bg-amber-600", desc: "Runs both vector and structural, deduplicates by content hash, reranks combined set with Nova Micro." },
+                  { step: "04", title: "CRAG Node", color: "bg-orange-600", desc: "Corrective RAG: scores each chunk 0-10 for relevance. If avg score below threshold → rewrites query + re-retrieves. All three retriever paths converge here." },
+                  { step: "END", title: "Terminal", color: "bg-slate-600", desc: "Context is set in state. chat.py reads the final state, builds the prompt, and streams the Bedrock response via SSE." },
                 ].map(({ step, title, color, desc }) => (
-                  <div key={step} className="flex gap-3">
+                  <div key={step+title} className="flex gap-3">
                     <div className={`w-8 h-8 rounded-lg ${color} text-white text-xs font-black flex items-center justify-center flex-shrink-0`}>{step}</div>
                     <div>
                       <div className="font-black text-slate-900 text-sm">{title}</div>
@@ -245,6 +254,123 @@ export default function FeaturesPage() {
                 <p className="text-slate-400 text-xs leading-relaxed">{desc}</p>
               </div>
             ))}
+          </div>
+        </div>
+      </Section>
+
+      {/* ══════════════════════════════════════════════════════════
+          2.5 HYBRID RETRIEVAL ENGINE
+      ══════════════════════════════════════════════════════════ */}
+      <Section id="hybrid-retrieval" badge="Hybrid Retrieval" color="violet" title="3-Mode Adaptive Retrieval Engine"
+        subtitle="VegaRAG doesn't rely on a single retrieval strategy. The Retrieval Router classifies each query at runtime and dispatches to the optimal retriever — vector search, structural tree walking, or a hybrid blend of both. Fully backward-compatible: agents with no tree index behave identically to pure vector search.">
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+          <DetailCard title="Vector Retrieval (BM25 + Pinecone + RRF)">
+            <ul className="space-y-3">
+              <Bullet color="blue">Embeds query with Amazon Titan v2 → Pinecone top-15 approximate nearest neighbour search using HNSW algorithm</Bullet>
+              <Bullet color="blue">BM25 keyword scoring runs in parallel — catches exact entity names, product IDs, and abbreviations that embedding similarity misses</Bullet>
+              <Bullet color="blue">Reciprocal Rank Fusion (RRF) merges both ranked lists into a single unified ranking with k=60 smoothing constant</Bullet>
+              <Bullet color="blue">Top-5 final chunks sent to CRAG evaluation before prompt injection</Bullet>
+              <Bullet color="blue">Best for: open-ended semantic queries, conversational questions, paraphrase-style lookups</Bullet>
+            </ul>
+          </DetailCard>
+
+          <DetailCard title="Structural Retrieval (LLM Tree Walking)">
+            <ul className="space-y-3">
+              <Bullet color="violet">At ingestion, Nova Micro segments each document into a 3-level hierarchical TOC tree: Document → Sections → Subsections</Bullet>
+              <Bullet color="violet">Each tree node stores: title, one-sentence summary, character start/end range, parent/children references</Bullet>
+              <Bullet color="violet">At query time, LLM scores all section titles/summaries for relevance (0-10), then descends into the best-scoring branch</Bullet>
+              <Bullet color="violet">Returns raw text from character ranges — zero embedding calls, zero Pinecone queries</Bullet>
+              <Bullet color="violet">Best for: "what does section 3 say?", "summarize the benefits chapter", "where does the document mention X?"</Bullet>
+            </ul>
+          </DetailCard>
+
+          <DetailCard title="Hybrid Blend (Merge + Dedupe + Rerank)">
+            <ul className="space-y-3">
+              <Bullet color="orange">Runs both vector and structural retrievers in sequence — captures both semantic and structural relevance</Bullet>
+              <Bullet color="orange">Deduplicates overlapping passages using SHA-256 hash of the first 200 characters</Bullet>
+              <Bullet color="orange">Nova Micro reranks the combined passage set with 0-10 relevance scoring per passage</Bullet>
+              <Bullet color="orange">Returns the top-N passages after reranking, with a unified retrieval trace for observability</Bullet>
+              <Bullet color="orange">Best for: ambiguous queries that mix semantic and structural patterns, or multi-document retrieval</Bullet>
+            </ul>
+          </DetailCard>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-6">
+          <DetailCard title="The Retrieval Router — How Strategy Is Chosen" dark>
+            <p className="text-slate-400 text-sm leading-relaxed mb-4">
+              When a query is classified as "rag" by the intent router, it flows to the retrieval router node. The router makes a two-step decision:
+            </p>
+            <div className="space-y-3">
+              {[
+                { label: "Step 1: Check agent config", desc: "If retrieval_mode is pinned to 'vector', 'structural', or 'hybrid' in the agent's settings, use that mode directly. Skip LLM classification." },
+                { label: "Step 2: Check tree existence", desc: "If mode is 'auto' but no document trees exist for this agent, fall back to 'vector'. This ensures 100% backward compatibility — existing agents with no tree index behave identically." },
+                { label: "Step 3: LLM classification", desc: "If mode is 'auto' and trees exist, Nova Micro classifies the query. Section-oriented queries → structural. Semantic queries → vector. Ambiguous or low confidence → hybrid." },
+                { label: "Fail-safe", desc: "If the LLM classification call fails for any reason, the router falls back to 'vector'. No query goes unanswered." },
+              ].map(({ label, desc }) => (
+                <div key={label} className="bg-slate-800 rounded-xl p-4">
+                  <div className="font-black text-slate-200 text-xs mb-1">{label}</div>
+                  <p className="text-slate-400 text-[11px] leading-relaxed">{desc}</p>
+                </div>
+              ))}
+            </div>
+          </DetailCard>
+
+          <div className="space-y-5">
+            <DetailCard title="Document Tree Indexing (Ingestion Time)">
+              <p className="text-slate-500 text-sm leading-relaxed mb-3">
+                When a document is ingested (URL crawl, text paste, or PDF upload), the existing chunk+embed pipeline runs first. Then, a background task calls Nova Micro to segment the full document text into a hierarchical tree.
+              </p>
+              <ul className="space-y-2">
+                <Bullet color="violet">Level 0: Root node (document title)</Bullet>
+                <Bullet color="violet">Level 1: Top-level sections (2-8 sections identified by LLM)</Bullet>
+                <Bullet color="violet">Level 2: Subsections within each section (only if section text &gt; 500 chars)</Bullet>
+                <Bullet color="violet">Each node stores start/end phrases that map to exact character positions</Bullet>
+                <Bullet color="violet">Tree is stored in DynamoDB as TREE#{'doc_id'}#root with full JSON + document text</Bullet>
+              </ul>
+            </DetailCard>
+
+            <DetailCard title="Corrective RAG (CRAG) — Self-Healing Retrieval">
+              <p className="text-slate-500 text-sm leading-relaxed mb-3">
+                After any retriever returns context, the CRAG node evaluates quality before it reaches the LLM:
+              </p>
+              <ul className="space-y-2">
+                <Bullet color="orange">Scores each chunk's relevance to the query (0-10) using a fast Nova Micro call</Bullet>
+                <Bullet color="orange">If average score &lt; quality threshold → rewrites the query to be more specific</Bullet>
+                <Bullet color="orange">Re-retrieves with the rewritten query using vector search</Bullet>
+                <Bullet color="orange">Uses the better context set — prevents hallucination from irrelevant chunks</Bullet>
+              </ul>
+            </DetailCard>
+          </div>
+        </div>
+
+        <div className="bg-violet-50 rounded-2xl p-7 border border-violet-100">
+          <h4 className="font-black text-slate-900 mb-4">Backward Compatibility Matrix</h4>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-violet-200">
+                  <th className="text-left text-xs font-black text-slate-400 uppercase tracking-wider py-2 pr-4">Scenario</th>
+                  <th className="text-left text-xs font-black text-slate-400 uppercase tracking-wider py-2">Behavior</th>
+                </tr>
+              </thead>
+              <tbody className="text-slate-600">
+                {[
+                  ["Agent has no tree index, no retrieval_mode set", "Vector-only (identical to before)"],
+                  ["Agent has trees, retrieval_mode = \"auto\"", "LLM picks strategy per query"],
+                  ["Agent has trees, retrieval_mode = \"structural\"", "Always structural retrieval"],
+                  ["Agent has trees, retrieval_mode = \"hybrid\"", "Always hybrid blend"],
+                  ["Structural retriever returns empty", "Automatic fallback to vector"],
+                  ["Hybrid retriever fails", "Automatic fallback to vector"],
+                  ["Retrieval router LLM fails", "Automatic fallback to vector"],
+                ].map(([scenario, behavior]) => (
+                  <tr key={scenario} className="border-b border-violet-100 last:border-0">
+                    <td className="py-2.5 pr-4 text-xs font-medium">{scenario}</td>
+                    <td className="py-2.5 text-xs font-bold text-violet-700">{behavior}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </div>
       </Section>

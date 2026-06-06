@@ -193,6 +193,10 @@ export interface AgentConfig {
   system_prompt: string;
   brand_color: string;
   name: string;
+  welcome_message?: string;
+  chat_title?: string;
+  chat_logo_url?: string;
+  retrieval_mode?: string;  // "auto" | "vector" | "structural" | "hybrid"
 }
 
 export interface WorkflowState {

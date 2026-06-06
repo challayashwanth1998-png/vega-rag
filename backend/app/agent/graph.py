@@ -1,10 +1,16 @@
 """
-Multi-Agent LangGraph — advanced RAG with CRAG + Hybrid Search.
+Multi-Agent LangGraph — advanced RAG with CRAG + Hybrid Search + Structural Retrieval.
 
 Pipeline:
   router_node  → classifies intent (casual / rag / sql)
-  rag_node     → Hybrid Search (BM25 + Vector + RRF fusion) → top-k chunks
+  ──── When intent == rag ────
+  retrieval_router_node → picks strategy (vector / structural / hybrid)
+  vector_retriever      → Hybrid Search (BM25 + Vector + RRF fusion) → top-k chunks
+  structural_retriever  → LLM-guided tree walking → section text (no embeddings)
+  hybrid_retriever      → both retrievers + merge + rerank
+  ──── All RAG paths flow through ────
   crag_node    → Corrective RAG: score chunk relevance → rewrite + re-retrieve if low quality
+  ──── Other intents ────
   sql_node     → DuckDB Text-to-SQL (respects per-user table restrictions)
   casual_node  → no retrieval; chat.py streams direct LLM response
 
@@ -19,6 +25,11 @@ Why Hybrid Search matters:
   Pure vector search misses exact keyword matches (names, IDs, codes).
   Pure BM25 misses semantic similarity.
   Hybrid (BM25 + Vector + RRF) captures both — consistently outperforms either alone.
+
+Why Structural Retrieval matters:
+  For section-oriented queries ("what does chapter 3 say?"), walking a
+  document tree by title/summary is more precise than embedding similarity.
+  The retrieval_router picks the best strategy per query at runtime.
 
 Why this separation from chat.py:
   SSE streaming must happen in the HTTP response generator (chat.py).
@@ -39,6 +50,9 @@ from app.services.pinecone_service import (
     index, embeddings, bm25_score, reciprocal_rank_fusion
 )
 from app.services.sql_service import execute_sql_for_bot
+from app.services.retrieval_router import pick_retrieval_strategy
+from app.services.structural_retriever import structural_retrieve
+from app.services.hybrid_retriever import hybrid_retrieve
 from app.core.config import settings
 
 # ── Corrective RAG threshold ──────────────────────────────────────────────────
@@ -55,11 +69,16 @@ FINAL_TOP_K = 5
 class AgentState(TypedDict):
     bot_id: str
     query: str
-    intent: str           # "casual" | "rag" | "sql"
-    context: str          # populated by rag_node + refined by crag_node
-    sql_result: str       # populated by sql_node
+    intent: str               # "casual" | "rag" | "sql"
+    context: str              # populated by retriever nodes + refined by crag_node
+    sql_result: str           # populated by sql_node
     restricted_tables: list   # filenames the requesting user cannot access
     retrieval_quality: float  # avg CRAG relevance score (0–10), for observability
+    # ── New: Hybrid Retrieval fields ──────────────────────────────────────────
+    retrieval_mode: str       # agent config: "auto" | "vector" | "structural" | "hybrid"
+    retrieval_strategy: str   # actual strategy chosen: "vector" | "structural" | "hybrid"
+    retrieval_trace: list     # visited nodes / merge info for observability
+    retrieval_source: str     # which retriever produced the final context
 
 
 def _get_llm(max_tokens: int = 512):
@@ -116,11 +135,34 @@ def casual_node(state: AgentState) -> AgentState:
     return {"context": "", "sql_result": "", "retrieval_quality": 10.0}
 
 
-# ── Node 2b: RAG — Hybrid Search (BM25 + Vector + RRF) ───────────────────────
+# ── Node 2b-router: Retrieval Router ─────────────────────────────────────────
 
-def rag_node(state: AgentState) -> AgentState:
+def retrieval_router_node(state: AgentState) -> AgentState:
     """
-    Hybrid retrieval pipeline:
+    Picks the retrieval strategy for this query.
+    Uses agent config retrieval_mode + LLM classification.
+    """
+    with tracer.start_as_current_span("retrieval_router") as span:
+        retrieval_mode = state.get("retrieval_mode", "auto") or "auto"
+        strategy = pick_retrieval_strategy(
+            query=state["query"],
+            bot_id=state["bot_id"],
+            retrieval_mode=retrieval_mode,
+        )
+        span.set_attribute("retrieval.strategy", strategy)
+        print(f"[retrieval_router] strategy: {strategy}")
+        return {"retrieval_strategy": strategy}
+
+
+def retrieval_strategy_decision(state: AgentState) -> Literal["vector", "structural", "hybrid"]:
+    return state.get("retrieval_strategy", "vector")  # type: ignore
+
+
+# ── Node 2b: RAG — Vector Retriever (BM25 + Vector + RRF) ────────────────────
+
+def vector_retriever_node(state: AgentState) -> AgentState:
+    """
+    Hybrid retrieval pipeline (unchanged from original rag_node):
       1. Embed the query → Pinecone vector search (top INITIAL_TOP_K)
       2. Score the same candidates with BM25 keyword matching
       3. Merge both rankings with Reciprocal Rank Fusion
@@ -129,7 +171,7 @@ def rag_node(state: AgentState) -> AgentState:
     This captures both semantic similarity AND exact keyword/entity matches,
     consistently outperforming either method alone.
     """
-    with tracer.start_as_current_span("hybrid_search") as span:
+    with tracer.start_as_current_span("vector_retriever") as span:
         span.set_attribute("search.top_k", INITIAL_TOP_K)
         try:
             query_vector = embeddings.embed_query(state["query"])
@@ -141,7 +183,12 @@ def rag_node(state: AgentState) -> AgentState:
             )
             matches = results.get("matches", [])
             if not matches:
-                return {"context": "", "sql_result": "", "retrieval_quality": 0.0}
+                return {
+                    "context": "", "sql_result": "",
+                    "retrieval_quality": 0.0,
+                    "retrieval_source": "vector",
+                    "retrieval_trace": [],
+                }
 
             # BM25 score each candidate against the query
             bm25_scores = {}
@@ -159,12 +206,87 @@ def rag_node(state: AgentState) -> AgentState:
                 if "text" in m.get("metadata", {})
             ]
             context = "\n\n---\n\n".join(chunks)
-            print(f"[rag] hybrid search: {len(matches)} candidates → {len(chunks)} after RRF")
-            return {"context": context, "sql_result": "", "retrieval_quality": 5.0}
+            print(f"[vector_retriever] hybrid search: {len(matches)} candidates → {len(chunks)} after RRF")
+            return {
+                "context": context, "sql_result": "",
+                "retrieval_quality": 5.0,
+                "retrieval_source": "vector",
+                "retrieval_trace": [],
+            }
 
         except Exception as e:
-            print(f"[rag] error: {e}")
-            return {"context": "", "sql_result": "", "retrieval_quality": 0.0}
+            print(f"[vector_retriever] error: {e}")
+            return {
+                "context": "", "sql_result": "",
+                "retrieval_quality": 0.0,
+                "retrieval_source": "vector",
+                "retrieval_trace": [],
+            }
+
+
+# ── Node 2b-structural: Structural Retriever ─────────────────────────────────
+
+def structural_retriever_node(state: AgentState) -> AgentState:
+    """
+    LLM-guided tree walking — no embeddings.
+    Falls back to vector retrieval if structural retrieval fails or returns empty.
+    """
+    with tracer.start_as_current_span("structural_retriever_node") as span:
+        try:
+            result = structural_retrieve(state["query"], state["bot_id"])
+
+            if not result["contexts"]:
+                # Fail-safe: fall back to vector retrieval
+                print("[structural_retriever_node] no results → falling back to vector")
+                span.set_attribute("structural.fallback_to_vector", True)
+                return vector_retriever_node(state)
+
+            context = "\n\n---\n\n".join(result["contexts"])
+            span.set_attribute("structural.contexts_found", len(result["contexts"]))
+            return {
+                "context": context,
+                "sql_result": "",
+                "retrieval_quality": 5.0,
+                "retrieval_source": "structural",
+                "retrieval_trace": result.get("retrieval_trace", []),
+            }
+
+        except Exception as e:
+            print(f"[structural_retriever_node] error: {e} → falling back to vector")
+            span.record_exception(e)
+            return vector_retriever_node(state)
+
+
+# ── Node 2b-hybrid: Hybrid Retriever ─────────────────────────────────────────
+
+def hybrid_retriever_node(state: AgentState) -> AgentState:
+    """
+    Runs both vector and structural retrievers, merges + reranks.
+    Falls back to vector retrieval if hybrid fails.
+    """
+    with tracer.start_as_current_span("hybrid_retriever_node") as span:
+        try:
+            result = hybrid_retrieve(state["query"], state["bot_id"])
+
+            if not result["contexts"]:
+                print("[hybrid_retriever_node] no results → falling back to vector")
+                span.set_attribute("hybrid.fallback_to_vector", True)
+                return vector_retriever_node(state)
+
+            context = "\n\n---\n\n".join(result["contexts"])
+            span.set_attribute("hybrid.contexts_found", len(result["contexts"]))
+            return {
+                "context": context,
+                "sql_result": "",
+                "retrieval_quality": 5.0,
+                "retrieval_source": "hybrid",
+                "retrieval_trace": result.get("retrieval_trace", []),
+            }
+
+        except Exception as e:
+            print(f"[hybrid_retriever_node] error: {e} → falling back to vector")
+            span.record_exception(e)
+            return vector_retriever_node(state)
 
 
 # ── Node 2b-2: CRAG — Corrective RAG ─────────────────────────────────────────
@@ -294,21 +416,41 @@ def sql_node(state: AgentState) -> AgentState:
 # ── Graph Assembly ────────────────────────────────────────────────────────────
 
 graph = StateGraph(AgentState)
+
+# Nodes
 graph.add_node("router", router_node)
 graph.add_node("casual", casual_node)
-graph.add_node("rag", rag_node)
-graph.add_node("crag", crag_node)   # ← NEW: Corrective RAG evaluator
+graph.add_node("retrieval_router", retrieval_router_node)
+graph.add_node("vector_retriever", vector_retriever_node)
+graph.add_node("structural_retriever", structural_retriever_node)
+graph.add_node("hybrid_retriever", hybrid_retriever_node)
+graph.add_node("crag", crag_node)
 graph.add_node("sql", sql_node)
 
+# Entry point
 graph.set_entry_point("router")
+
+# Intent routing: casual | rag → retrieval_router | sql
 graph.add_conditional_edges("router", route_decision, {
     "casual": "casual",
-    "rag": "rag",
+    "rag": "retrieval_router",
     "sql": "sql",
 })
 
+# Retrieval strategy routing: vector | structural | hybrid
+graph.add_conditional_edges("retrieval_router", retrieval_strategy_decision, {
+    "vector": "vector_retriever",
+    "structural": "structural_retriever",
+    "hybrid": "hybrid_retriever",
+})
+
+# All retrieval paths flow through CRAG
+graph.add_edge("vector_retriever", "crag")
+graph.add_edge("structural_retriever", "crag")
+graph.add_edge("hybrid_retriever", "crag")
+
+# Terminal edges
 graph.add_edge("casual", END)
-graph.add_edge("rag", "crag")   # ← RAG always flows through CRAG
 graph.add_edge("crag", END)
 graph.add_edge("sql", END)
 

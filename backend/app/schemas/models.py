@@ -20,6 +20,7 @@ class UpdateConfigReq(BaseModel):
     welcome_message: str = "Hi! How can I assist you today?"
     chat_title: str = ""
     chat_logo_url: str = ""
+    retrieval_mode: str = "auto"  # "auto" | "vector" | "structural" | "hybrid"
 
 
 class WorkflowReq(BaseModel):

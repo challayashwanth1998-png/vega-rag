@@ -15,6 +15,7 @@ from app.schemas.models import CrawlRequest, TextRequest
 from app.services.scraper import scrape_url_to_chunks
 from app.services.pinecone_service import embed_and_upsert_documents
 from app.services.pdf_service import extract_pdf_to_chunks, store_pdf_in_s3
+from app.services.tree_service import build_document_tree
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_core.documents import Document
 
@@ -63,7 +64,7 @@ def _mark_failed(table, bot_id: str, source_sk: str, error: str):
 # ── URL Crawl ─────────────────────────────────────────────────────────────────
 
 @router.post("/crawl")
-def crawl_website(req: CrawlRequest):
+def crawl_website(req: CrawlRequest, background_tasks: BackgroundTasks):
     """Scrapes a URL, chunks, embeds via Bedrock Titan + Contextual Retrieval, upserts to Pinecone."""
     table = _get_table()
     source_sk = f"SOURCE#{req.url}"
@@ -73,6 +74,10 @@ def crawl_website(req: CrawlRequest):
         full_text = "\n\n".join(d.page_content for d in documents)
         chunks_inserted = embed_and_upsert_documents(documents, req.bot_id, full_text=full_text)
         _mark_synced(table, req.bot_id, source_sk, chunks_inserted)
+        # Build document tree index in background (for structural retrieval)
+        background_tasks.add_task(
+            build_document_tree, full_text, req.bot_id, req.url, doc_title=req.url[:60]
+        )
         return {"status": "success", "chunks_memorized": chunks_inserted}
     except Exception as e:
         _mark_failed(table, req.bot_id, source_sk, str(e))
@@ -82,7 +87,7 @@ def crawl_website(req: CrawlRequest):
 # ── Raw Text ──────────────────────────────────────────────────────────────────
 
 @router.post("/text")
-def ingest_text(req: TextRequest):
+def ingest_text(req: TextRequest, background_tasks: BackgroundTasks):
     """Chunks raw pasted text, embeds via Bedrock Titan + Contextual Retrieval, upserts to Pinecone."""
     table = _get_table()
     source_sk = f"SOURCE#TEXT#{req.title}"
@@ -96,6 +101,10 @@ def ingest_text(req: TextRequest):
         ]
         chunks_inserted = embed_and_upsert_documents(documents, req.bot_id, full_text=req.text_content)
         _mark_synced(table, req.bot_id, source_sk, chunks_inserted)
+        # Build document tree index in background (for structural retrieval)
+        background_tasks.add_task(
+            build_document_tree, req.text_content, req.bot_id, req.title, doc_title=req.title
+        )
         return {"status": "success", "chunks_memorized": chunks_inserted}
     except Exception as e:
         _mark_failed(table, req.bot_id, source_sk, str(e))
@@ -117,7 +126,13 @@ def _process_pdf_async(file_bytes: bytes, filename: str, bot_id: str, source_sk:
         # Step 3: Contextual Retrieval embed → Pinecone upsert
         chunks_inserted = embed_and_upsert_documents(documents, bot_id, full_text=full_text)
 
-        # Step 4: Mark synced + store S3 reference
+        # Step 4: Build document tree index (for structural retrieval)
+        try:
+            build_document_tree(full_text, bot_id, filename, doc_title=filename)
+        except Exception as tree_err:
+            print(f"[crawl] tree building failed (non-fatal): {tree_err}")
+
+        # Step 5: Mark synced + store S3 reference
         _mark_synced(table, bot_id, source_sk, chunks_inserted, s3_uri)
     except Exception as e:
         _mark_failed(table, bot_id, source_sk, str(e))

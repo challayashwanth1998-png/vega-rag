@@ -139,7 +139,22 @@ async def chat_stream(req: ChatRequest):
                 log.error("activity_log_write_failed", error=str(e))
         return StreamingResponse(cached_event_generator(), media_type="text/event-stream")
 
-    # 4. Run LangGraph — router + retrieval only (no generation inside graph)
+    # 4. Fetch agent config (needed BEFORE graph invocation for retrieval_mode)
+    system_prompt = "You are a helpful AI assistant."
+    agent_name = "Custom Agent"
+    retrieval_mode_cfg = "auto"
+    try:
+        cfg = table.get_item(Key={"PK": f"AGENT#{req.bot_id}", "SK": "CONFIG"})
+        if "Item" in cfg:
+            agent_name = cfg["Item"].get("name", agent_name)
+            user_prompt = cfg["Item"].get("system_prompt", system_prompt)
+            system_prompt = f"Your name is {agent_name}. {user_prompt}"
+            retrieval_mode_cfg = cfg["Item"].get("retrieval_mode", "auto")
+    except Exception as e:
+        log.error("config_lookup_failed", error=str(e))
+        system_prompt = f"Your name is {agent_name}. {system_prompt}"
+
+    # 5. Run LangGraph — router + retrieval only (no generation inside graph)
     try:
         final_state = agent_executor.invoke({
             "bot_id": req.bot_id,
@@ -148,6 +163,10 @@ async def chat_stream(req: ChatRequest):
             "context": "",
             "sql_result": "",
             "restricted_tables": restricted_tables,
+            "retrieval_mode": retrieval_mode_cfg,
+            "retrieval_strategy": "",
+            "retrieval_trace": [],
+            "retrieval_source": "",
         })
     except Exception as e:
         log.error("langgraph_execution_failed", error=str(e))
@@ -156,20 +175,10 @@ async def chat_stream(req: ChatRequest):
     intent = final_state.get("intent", "rag")
     context = final_state.get("context", "")
     sql_result = final_state.get("sql_result", "")
-    log.info("langgraph_execution_success", intent=intent, context_len=len(context), sql_result_len=len(sql_result))
-
-    # 4. Fetch agent system prompt
-    system_prompt = "You are a helpful AI assistant."
-    agent_name = "Custom Agent"
-    try:
-        cfg = table.get_item(Key={"PK": f"AGENT#{req.bot_id}", "SK": "CONFIG"})
-        if "Item" in cfg:
-            agent_name = cfg["Item"].get("name", agent_name)
-            user_prompt = cfg["Item"].get("system_prompt", system_prompt)
-            system_prompt = f"Your name is {agent_name}. {user_prompt}"
-    except Exception as e:
-        log.error("config_lookup_failed", error=str(e))
-        system_prompt = f"Your name is {agent_name}. {system_prompt}"
+    retrieval_strategy = final_state.get("retrieval_strategy", "")
+    retrieval_trace = final_state.get("retrieval_trace", [])
+    retrieval_source = final_state.get("retrieval_source", "")
+    log.info("langgraph_execution_success", intent=intent, context_len=len(context), sql_result_len=len(sql_result), retrieval_strategy=retrieval_strategy)
 
     # 5. Build messages based on intent
     if intent == "casual":
@@ -232,7 +241,9 @@ No relevant documents were found in the knowledge base. Let them know they shoul
         tools_payload = {
             "intent": intent,
             "sql_query_result": sql_result[:1500] if intent == "sql" else None,
-            "rag_chunks_found": len(context.split("\\n\\n---\\n\\n")) if intent == "rag" and context else 0
+            "rag_chunks_found": len(context.split("\\n\\n---\\n\\n")) if intent == "rag" and context else 0,
+            "retrieval_strategy": retrieval_strategy or None,
+            "retrieval_source": retrieval_source or None,
         }
         yield f"data: {json.dumps({'tools': tools_payload})}\n\n"
         
@@ -288,7 +299,7 @@ No relevant documents were found in the knowledge base. Let them know they shoul
 
         # 7. Log conversation to DynamoDB
         try:
-            table.put_item(Item={
+            activity_item = {
                 "PK": f"ACTIVITY#{req.bot_id}",
                 "SK": f"ENTRY#{req.session_id}#{datetime.datetime.utcnow().isoformat()}",
                 "session_id": req.session_id,
@@ -298,8 +309,16 @@ No relevant documents were found in the knowledge base. Let them know they shoul
                 "timestamp": datetime.datetime.utcnow().isoformat(),
                 "flagged_toxic": is_toxic,
                 "flagged_hallucination": not is_grounded,
-            })
-            log.info("chat_request_completed", total_tokens=total_tokens)
+            }
+            # Add retrieval observability fields when present
+            if retrieval_strategy:
+                activity_item["retrieval_strategy"] = retrieval_strategy
+            if retrieval_source:
+                activity_item["retrieval_source"] = retrieval_source
+            if retrieval_trace:
+                activity_item["retrieval_trace"] = json.dumps(retrieval_trace)
+            table.put_item(Item=activity_item)
+            log.info("chat_request_completed", total_tokens=total_tokens, retrieval_strategy=retrieval_strategy)
         except Exception as e:
             log.error("activity_log_write_failed", error=str(e))
 

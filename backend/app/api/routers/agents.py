@@ -165,6 +165,7 @@ def update_agent_config(bot_id: str, req: UpdateConfigReq):
         "welcome_message": req.welcome_message,
         "chat_title": req.chat_title,
         "chat_logo_url": req.chat_logo_url,
+        "retrieval_mode": req.retrieval_mode,
     })
     return {"status": "saved"}
 
@@ -182,6 +183,7 @@ def get_agent_config(bot_id: str):
         "welcome_message": "Hi! How can I assist you today?",
         "chat_title": "",
         "chat_logo_url": "",
+        "retrieval_mode": "auto",
     }
 
 
